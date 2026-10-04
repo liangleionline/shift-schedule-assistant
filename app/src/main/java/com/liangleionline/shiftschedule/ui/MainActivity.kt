@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.room.Room
 import com.liangleionline.shiftschedule.ScheduleParser
 import com.liangleionline.shiftschedule.data.*
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -30,6 +31,10 @@ class MainActivity : AppCompatActivity() {
     private var selectedDate = LocalDate.now()
     private var weekOffset = 0L
     private var firstSetupShown = false
+    private var suppressTeamCallback = true
+    private var currentTeamId: Long? = null
+    private var scheduleGeneration = 0L
+    private var scheduleJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,7 +75,15 @@ class MainActivity : AppCompatActivity() {
         setContentView(root)
         prev.setOnClickListener { weekOffset--; renderWeek(); refreshSchedule() }
         next.setOnClickListener { weekOffset++; renderWeek(); refreshSchedule() }
-        teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener { override fun onItemSelected(p: AdapterView<*>?, v: android.view.View?, pos: Int, id: Long) { refreshSchedule() }; override fun onNothingSelected(p: AdapterView<*>?) {} }
+        teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: android.view.View?, pos: Int, id: Long) {
+                val newTeam = teams.getOrNull(pos) ?: return
+                if (suppressTeamCallback || newTeam.id == currentTeamId) return
+                currentTeamId = newTeam.id
+                refreshSchedule()
+            }
+            override fun onNothingSelected(p: AdapterView<*>?) {}
+        }
         import.setOnClickListener { showImportDialog() }
         org.setOnClickListener { startActivity(Intent(this, OrganizationActivity::class.java)) }
         manage.setOnClickListener { startActivity(Intent(this, StaffManageActivity::class.java)) }
@@ -94,12 +107,28 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() { super.onResume(); refreshSchedule() }
 
+    override fun onDestroy() {
+        scheduleJob?.cancel()
+        super.onDestroy()
+    }
+
     private fun observeData() = lifecycleScope.launch {
         db.dao().teams().collect { list ->
-            teams = list
-            val adapter = ArrayAdapter(this@MainActivity, com.liangleionline.shiftschedule.R.layout.item_spinner, list.map { it.name })
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            teamSpinner.adapter = adapter
+            teams = list.distinctBy { it.id }.sortedBy { it.id }
+            val names = teams.map { it.name }
+            val existingAdapter = teamSpinner.adapter as? ArrayAdapter<*>
+            val adapterChanged = existingAdapter == null || existingAdapter.count != names.size || names.indices.any { existingAdapter.getItem(it) != names[it] }
+            if (adapterChanged) {
+                val adapter = ArrayAdapter(this@MainActivity, com.liangleionline.shiftschedule.R.layout.item_spinner, names)
+                adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                suppressTeamCallback = true
+                teamSpinner.adapter = adapter
+                val preferredId = currentTeamId ?: teams.firstOrNull()?.id
+                currentTeamId = preferredId
+                val index = teams.indexOfFirst { it.id == preferredId }.coerceAtLeast(0)
+                if (teams.isNotEmpty()) teamSpinner.setSelection(index)
+                suppressTeamCallback = false
+            }
             if (list.isEmpty()) {
                 if (!firstSetupShown) {
                     firstSetupShown = true
@@ -128,19 +157,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun currentTeam(): Team? = teams.getOrNull(teamSpinner.selectedItemPosition)
+    private fun currentTeam(): Team? = teams.firstOrNull { it.id == currentTeamId } ?: teams.firstOrNull().also { currentTeamId = it?.id }
 
-    private fun refreshSchedule() = lifecycleScope.launch {
-        if (!::leftColumn.isInitialized) return@launch
-        leftColumn.removeAllViews(); rightColumn.removeAllViews()
-        val team = currentTeam() ?: return@launch
-        val staff = db.dao().staffByTeam(team.id).first()
-        val groups = db.dao().groups(team.id).first()
-        val record = db.dao().schedule(team.id, selectedDate.toString().substring(5))
-        val working = if (record == null) emptyList() else if (record.mode == "WORK") staff.filter { it.id in record.staffIds } else staff.filterNot { it.id in record.staffIds }
-        val resting = staff - working.toSet()
-        renderColumn(leftColumn, "当天上班", Color.rgb(220,252,231), Color.rgb(22,101,52), groups, working)
-        renderColumn(rightColumn, "当天休息", Color.rgb(241,245,249), Color.rgb(71,85,105), groups, resting)
+    private fun refreshSchedule() {
+        val generation = ++scheduleGeneration
+        scheduleJob?.cancel()
+        scheduleJob = lifecycleScope.launch {
+            if (!::leftColumn.isInitialized) return@launch
+            leftColumn.removeAllViews(); rightColumn.removeAllViews()
+            val team = currentTeam() ?: return@launch
+            val staff = db.dao().staffByTeam(team.id).first().distinctBy { it.id }
+            val groups = db.dao().groups(team.id).first().distinctBy { it.id }.sortedBy { it.id }
+            val record = db.dao().schedule(team.id, selectedDate.toString().substring(5))
+            val working = if (record == null) emptyList() else if (record.mode == "WORK") staff.filter { it.id in record.staffIds.distinct() } else staff.filterNot { it.id in record.staffIds.distinct() }
+            val resting = staff - working.toSet()
+            if (generation != scheduleGeneration) return@launch
+            renderColumn(leftColumn, "当天上班", Color.rgb(220,252,231), Color.rgb(22,101,52), groups, working)
+            renderColumn(rightColumn, "当天休息", Color.rgb(241,245,249), Color.rgb(71,85,105), groups, resting)
+        }
     }
 
     private fun renderColumn(container: LinearLayout, title: String, badgeBg: Int, badgeText: Int, groups: List<Group>, staff: List<Staff>) {
