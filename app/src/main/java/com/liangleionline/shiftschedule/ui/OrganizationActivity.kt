@@ -35,10 +35,9 @@ class OrganizationActivity : AppCompatActivity() {
         root.addView(TextView(this).apply { text = "维护班、小组；删除前会提示联动影响"; textSize = 14f; setTextColor(Color.rgb(99,115,139)); setPadding(0,8,0,18) })
         val teamRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         teamSpinner = Spinner(this)
-        val renameTeam = Button(this).apply { text = "改班名" }
-        val addTeam = Button(this).apply { text = "新增班" }
-        val deleteTeam = Button(this).apply { text = "删班" }
-        teamRow.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)); teamRow.addView(renameTeam); teamRow.addView(addTeam); teamRow.addView(deleteTeam)
+        val editTeamInfo = Button(this).apply { text = "编辑班信息" }
+        teamRow.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2.2f))
+        teamRow.addView(editTeamInfo, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         val groupActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0,20,0,8) }
         val addGroup = Button(this).apply { text = "新增小组" }
         groupActions.addView(TextView(this).apply { text = "小组列表"; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(30,41,59)) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -58,28 +57,7 @@ class OrganizationActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        addTeam.setOnClickListener { button ->
-            button.isEnabled = false
-            textInputDialog("新增班", "请输入班名", onDismiss = { button.isEnabled = true }) { name ->
-                lifecycleScope.launch {
-                    db.dao().insertUniqueTeam(name)
-                    button.isEnabled = true
-                    render(selectNewestTeam = true)
-                }
-            }
-        }
-        renameTeam.setOnClickListener {
-            val t = selectedTeam ?: return@setOnClickListener
-            textInputDialog("修改班名", "请输入新的班名", t.name) { name ->
-                lifecycleScope.launch { db.dao().updateTeam(t.copy(name = name)); render(keepTeamId = t.id) }
-            }
-        }
-        deleteTeam.setOnClickListener {
-            val t = selectedTeam ?: return@setOnClickListener
-            confirm("删除班", "删除「${t.name}」会同时删除其小组和人员，确定删除？") {
-                lifecycleScope.launch { db.dao().deleteTeam(t); render(selectFirstTeam = true) }
-            }
-        }
+        editTeamInfo.setOnClickListener { showTeamEditSheet() }
         addGroup.setOnClickListener { button ->
             button.isEnabled = false
             val team = selectedTeam ?: run { button.isEnabled = true; return@setOnClickListener }
@@ -97,6 +75,29 @@ class OrganizationActivity : AppCompatActivity() {
     override fun onDestroy() {
         renderJob?.cancel()
         super.onDestroy()
+    }
+
+    private fun showTeamEditSheet() {
+        val options = arrayOf("修改班名", "新增班", "删除班")
+        AlertDialog.Builder(this).setTitle("编辑班信息").setItems(options) { _, which ->
+            when (which) {
+                0 -> {
+                    val t = selectedTeam ?: return@setItems
+                    textInputDialog("修改班名", "请输入新的班名", t.name) { name ->
+                        lifecycleScope.launch { db.dao().updateTeam(t.copy(name = name)); render(keepTeamId = t.id) }
+                    }
+                }
+                1 -> textInputDialog("新增班", "请输入班名") { name ->
+                    lifecycleScope.launch { db.dao().insertUniqueTeam(name); render(selectNewestTeam = true) }
+                }
+                2 -> {
+                    val t = selectedTeam ?: return@setItems
+                    confirm("删除班", "删除「${t.name}」会同时删除其小组和人员，确定删除？") {
+                        lifecycleScope.launch { db.dao().deleteTeam(t); render(selectFirstTeam = true) }
+                    }
+                }
+            }
+        }.setNegativeButton("取消", null).show()
     }
 
     private fun statusBarInset(): Int {

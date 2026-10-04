@@ -54,8 +54,15 @@ class MainActivity : AppCompatActivity() {
         val prev = Button(this).apply { text = "‹ 上一周" }
         val next = Button(this).apply { text = "下一周 ›" }
         weekContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; weightSum = 7f; setPadding(0,10,0,0) }
+        val weekTitle = TextView(this).apply {
+            text = "本周"
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.rgb(21,101,192))
+            setPadding(8,8,8,8)
+        }
         top.addView(prev, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        top.addView(TextView(this).apply { text = "本周"; gravity = Gravity.CENTER; setTypeface(typeface, Typeface.BOLD) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        top.addView(weekTitle, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         top.addView(next, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         weekCard.addView(top); weekCard.addView(weekContainer)
         teamSpinner = Spinner(this)
@@ -84,6 +91,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(root)
         prev.setOnClickListener { weekOffset--; renderWeek(); refreshSchedule() }
         next.setOnClickListener { weekOffset++; renderWeek(); refreshSchedule() }
+        weekTitle.setOnClickListener { weekOffset = 0L; selectedDate = LocalDate.now(); renderWeek(); refreshSchedule() }
         teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: android.view.View?, pos: Int, id: Long) {
                 val newTeam = teams.getOrNull(pos) ?: return
