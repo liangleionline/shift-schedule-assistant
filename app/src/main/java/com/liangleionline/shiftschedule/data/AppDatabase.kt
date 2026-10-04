@@ -38,11 +38,36 @@ interface AppDao {
     @Update suspend fun updateStaff(staff: Staff)
     @Delete suspend fun deleteStaff(staff: Staff)
     @Query("SELECT COUNT(*) FROM Staff WHERE groupId=:groupId AND role='班长'") suspend fun leaderCount(groupId: Long): Int
+    @Query("SELECT * FROM Staff WHERE groupId=:groupId") suspend fun staffByGroupOnce(groupId: Long): List<Staff>
     @Query("SELECT * FROM Staff WHERE groupId=:groupId ORDER BY CASE WHEN role='班长' THEN 0 ELSE 1 END, id") suspend fun staffByGroup(groupId: Long): List<Staff>
+    @Query("UPDATE Staff SET groupId=:targetGroupId WHERE id=:staffId") suspend fun moveStaff(staffId: Long, targetGroupId: Long)
+    @Query("SELECT * FROM ScheduleRecord") suspend fun allSchedules(): List<ScheduleRecord>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveAlias(alias: NameAlias)
     @Upsert suspend fun upsertSchedule(record: ScheduleRecord)
     @Query("DELETE FROM ScheduleRecord") suspend fun clearSchedules()
     @Query("DELETE FROM NameAlias WHERE rawName=:rawName") suspend fun deleteAlias(rawName: String)
+
+    @Transaction
+    suspend fun cleanupDuplicates() {
+        allTeams().forEach { team ->
+            groupsOnce(team.id).groupBy { it.name }.filterValues { it.size > 1 }.forEach { (_, duplicates) ->
+                val keep = duplicates.minByOrNull { it.id } ?: return@forEach
+                duplicates.filter { it.id != keep.id }.forEach { duplicate ->
+                    staffByGroupOnce(duplicate.id).forEach { staff ->
+                        val existing = staffByGroupOnce(keep.id).firstOrNull { it.name == staff.name && it.role == staff.role }
+                            ?: staffByGroupOnce(keep.id).firstOrNull { it.name == staff.name }
+                        if (existing == null) moveStaff(staff.id, keep.id) else deleteStaff(staff)
+                    }
+                    deleteGroup(duplicate)
+                }
+            }
+        }
+        allSchedules().forEach { record ->
+            val allIds = allStaff().map { it.id }.toSet()
+            val validIds = record.staffIds.distinct().filter { it in allIds }
+            if (validIds != record.staffIds) upsertSchedule(record.copy(staffIds = validIds))
+        }
+    }
 }
 
 @Database(entities = [Team::class, Group::class, Staff::class, NameAlias::class, ScheduleRecord::class], version = 2, exportSchema = false)

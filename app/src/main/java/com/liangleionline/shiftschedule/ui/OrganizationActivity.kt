@@ -71,6 +71,7 @@ class OrganizationActivity : AppCompatActivity() {
     }
 
     private fun reloadTeams(keepSelectedId: Long? = null, addNewest: Boolean): kotlinx.coroutines.Job = lifecycleScope.launch {
+        db.dao().cleanupDuplicates()
         teams = db.dao().allTeams()
         val adapter = ArrayAdapter(this@OrganizationActivity, R.layout.item_spinner, teams.map { it.name })
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)

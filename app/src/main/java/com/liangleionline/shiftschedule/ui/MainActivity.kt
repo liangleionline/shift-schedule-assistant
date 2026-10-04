@@ -80,6 +80,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() { super.onResume(); refreshSchedule() }
 
     private fun observeData() = lifecycleScope.launch {
+        db.dao().cleanupDuplicates()
         db.dao().teams().collect { list ->
             teams = list
             val adapter = ArrayAdapter(this@MainActivity, com.liangleionline.shiftschedule.R.layout.item_spinner, list.map { it.name })
