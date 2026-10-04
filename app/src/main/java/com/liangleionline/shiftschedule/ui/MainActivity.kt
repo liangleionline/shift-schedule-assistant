@@ -21,12 +21,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rightColumn: LinearLayout
     private lateinit var teamSpinner: Spinner
     private var teams = listOf<Team>()
+    private val baseDate = LocalDate.now()
     private var selectedDate = LocalDate.now()
     private var weekOffset = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").build()
+        db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db")
+            .fallbackToDestructiveMigration()
+            .build()
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16,16,16,16) }
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val prev = Button(this).apply { text = "上一周" }
@@ -63,7 +66,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderWeek() {
         weekContainer.removeAllViews()
-        val monday = selectedDate.minusDays((selectedDate.dayOfWeek.value - 1).toLong()).plusWeeks(weekOffset)
+        val monday = baseDate.minusDays((baseDate.dayOfWeek.value - 1).toLong()).plusWeeks(weekOffset)
         for (i in 0..6) {
             val date = monday.plusDays(i.toLong())
             val tv = TextView(this).apply { text = date.dayOfMonth.toString(); gravity = Gravity.CENTER; setPadding(4,12,4,12) }
