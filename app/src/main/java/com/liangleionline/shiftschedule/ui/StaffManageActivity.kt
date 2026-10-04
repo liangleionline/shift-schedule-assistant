@@ -146,7 +146,16 @@ class StaffManageActivity : AppCompatActivity() {
         if (group == null) { Toast.makeText(this@StaffManageActivity, "请先选择小组", Toast.LENGTH_SHORT).show(); return@launch }
         if (old != null && old.role == "班长" && (old.groupId != group.id || role != "班长") && db.dao().leaderCount(old.groupId) <= 1) { Toast.makeText(this@StaffManageActivity, "原小组至少保留一个班长", Toast.LENGTH_SHORT).show(); return@launch }
         if (old == null) db.dao().insertStaff(Staff(groupId = group.id, name = name, role = role)) else db.dao().updateStaff(old.copy(groupId = group.id, name = name, role = role))
-        loadTeams(keepSelection = true)
+        selectedTeam = teams.firstOrNull { it.id == group.teamId }
+        selectedGroup = group
+        suppress = true
+        teamSpinner.setSelection(teams.indexOfFirst { it.id == selectedTeam?.id }.coerceAtLeast(0))
+        val latestGroups = db.dao().groupsOnce(group.teamId)
+        groups = latestGroups
+        groupSpinner.adapter = spinnerAdapter(latestGroups.map { it.name })
+        groupSpinner.setSelection(latestGroups.indexOfFirst { it.id == group.id }.coerceAtLeast(0))
+        suppress = false
+        loadStaff()
     }
     private fun confirmDelete(staff: Staff) = AlertDialog.Builder(this).setTitle("删除人员").setMessage("确定删除「${staff.name}」吗？").setPositiveButton("删除") { _, _ -> lifecycleScope.launch {
         if (staff.role == "班长" && db.dao().leaderCount(staff.groupId) <= 1) Toast.makeText(this@StaffManageActivity, "每个小组至少保留一个班长", Toast.LENGTH_SHORT).show() else { db.dao().deleteStaff(staff); loadStaff() }
