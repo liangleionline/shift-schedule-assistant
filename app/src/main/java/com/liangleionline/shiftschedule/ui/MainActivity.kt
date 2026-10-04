@@ -1,5 +1,6 @@
 package com.liangleionline.shiftschedule.ui
 
+import android.app.DatePickerDialog
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
@@ -58,16 +59,19 @@ class MainActivity : AppCompatActivity() {
         top.addView(next, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         weekCard.addView(top); weekCard.addView(weekContainer)
         teamSpinner = Spinner(this)
-        val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0,8,0,8) }
-        val import = Button(this).apply { text = "导入排班" }
+        val buttons = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0,8,0,8) }
+        val importRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val manageRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0,8,0,0) }
+        val import = Button(this).apply { text = "粘贴导入" }
+        val cyclic = Button(this).apply { text = "循环排班" }
         val settings = Button(this).apply { text = "设置" }
         val org = Button(this).apply { text = "组织架构" }
         val manage = Button(this).apply { text = "人员管理" }
-        buttons.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        buttons.addView(import)
-        buttons.addView(settings)
-        buttons.addView(org)
-        buttons.addView(manage)
+        importRow.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        importRow.addView(import)
+        importRow.addView(cyclic)
+        listOf(settings, org, manage).forEach { manageRow.addView(it, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)) }
+        buttons.addView(importRow); buttons.addView(manageRow)
         val columns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         leftColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(8,8,8,8) }
         rightColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(8,8,8,8) }
@@ -90,6 +94,7 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
         import.setOnClickListener { showImportDialog() }
+        cyclic.setOnClickListener { showCyclicImportFlow() }
         settings.setOnClickListener { startActivity(Intent(this, ScheduleSettingsActivity::class.java)) }
         org.setOnClickListener { startActivity(Intent(this, OrganizationActivity::class.java)) }
         manage.setOnClickListener { startActivity(Intent(this, StaffManageActivity::class.java)) }
@@ -220,6 +225,125 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun showCyclicImportFlow() = lifecycleScope.launch {
+        val team = currentTeam() ?: return@launch
+        val groups = db.dao().groupsOnce(team.id)
+        val allStaff = db.dao().allStaff().filter { person -> groups.any { it.id == person.groupId } }
+        if (groups.isEmpty()) { Toast.makeText(this@MainActivity, "请先创建小组", Toast.LENGTH_SHORT).show(); return@launch }
+        var start = LocalDate.now()
+        var end = start.plusDays(1)
+        var cycleDays = 2
+        val panel = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 0) }
+        val rangeButton = Button(this@MainActivity)
+        val cycleInput = EditText(this@MainActivity).apply { hint = "几天一循环，例如 2"; setText(cycleDays.toString()) }
+        fun updateRangeText() { rangeButton.text = "日期区间：${formatMd(start)} 至 ${formatMd(end)}" }
+        rangeButton.setOnClickListener {
+            DatePickerDialog(this@MainActivity, { _, y, m, d ->
+                start = LocalDate.of(y, m + 1, d)
+                DatePickerDialog(this@MainActivity, { _, y2, m2, d2 ->
+                    end = LocalDate.of(y2, m2 + 1, d2)
+                    if (end.isBefore(start)) { end = start; Toast.makeText(this@MainActivity, "结束日期已自动调整为开始日期", Toast.LENGTH_SHORT).show() }
+                    updateRangeText()
+                }, end.year, end.monthValue - 1, end.dayOfMonth).show()
+            }, start.year, start.monthValue - 1, start.dayOfMonth).show()
+        }
+        updateRangeText()
+        panel.addView(TextView(this@MainActivity).apply { text = "选择日期区间"; setTextColor(Color.rgb(51,65,85)); setPadding(0,8,0,4) })
+        panel.addView(rangeButton)
+        panel.addView(TextView(this@MainActivity).apply { text = "循环天数"; setTextColor(Color.rgb(51,65,85)); setPadding(0,14,0,4) })
+        panel.addView(cycleInput)
+        AlertDialog.Builder(this@MainActivity).setTitle("循环排班").setView(panel)
+            .setPositiveButton("下一步") { _, _ ->
+                cycleDays = cycleInput.text.toString().toIntOrNull()?.coerceIn(1, 31) ?: 2
+                showCycleGroupSetup(team, groups, allStaff, start, end, cycleDays)
+            }.setNegativeButton("取消", null).show()
+    }
+
+    private fun showCycleGroupSetup(team: Team, groups: List<Group>, allStaff: List<Staff>, start: LocalDate, end: LocalDate, cycleDays: Int) {
+        val selectedByCycle = (0 until cycleDays).map { index ->
+            val checks = groups.map { group ->
+                android.widget.CheckBox(this).apply { text = group.name; isChecked = index == 0 }
+            }
+            index to checks
+        }
+        val scroll = ScrollView(this)
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 0) }
+        selectedByCycle.forEach { (index, checks) ->
+            panel.addView(TextView(this).apply { text = "第 ${index + 1} 天上班小组"; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(30,41,59)); setPadding(0,14,0,6) })
+            checks.forEach { panel.addView(it) }
+        }
+        scroll.addView(panel)
+        AlertDialog.Builder(this).setTitle("设置循环规则").setView(scroll)
+            .setPositiveButton("生成预览") { _, _ ->
+                val workingGroupIdsByCycle = selectedByCycle.map { (_, checks) -> checks.mapIndexedNotNull { i, box -> if (box.isChecked) groups[i].id else null } }
+                generateCyclicPreview(team, groups, allStaff, start, end, workingGroupIdsByCycle)
+            }.setNegativeButton("取消", null).show()
+    }
+
+    private fun generateCyclicPreview(team: Team, groups: List<Group>, allStaff: List<Staff>, start: LocalDate, end: LocalDate, workingGroupIdsByCycle: List<List<Long>>) = lifecycleScope.launch {
+        var cursor = start
+        val daily = mutableListOf<Pair<LocalDate, MutableList<Staff>>>()
+        var index = 0
+        while (!cursor.isAfter(end)) {
+            val groupIds = workingGroupIdsByCycle.getOrNull(index % workingGroupIdsByCycle.size.coerceAtLeast(1)).orEmpty()
+            daily.add(cursor to allStaff.filter { it.groupId in groupIds }.sortedWith(compareByDescending<Staff> { it.role == "班长" }.thenBy { it.id }).toMutableList())
+            cursor = cursor.plusDays(1); index++
+        }
+        showCyclicPreview(team, groups, allStaff, daily)
+    }
+
+    private fun showCyclicPreview(team: Team, groups: List<Group>, allStaff: List<Staff>, daily: MutableList<Pair<LocalDate, MutableList<Staff>>>) {
+        val scroll = ScrollView(this)
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(20, 10, 20, 0) }
+        fun rebuild() {
+            panel.removeAllViews()
+            daily.forEachIndexed { dayIndex, (date, people) ->
+                val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16,14,16,14); background = rounded(Color.WHITE, 22f, Color.rgb(226,232,240)); layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 12 } }
+                val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                titleRow.addView(TextView(this).apply { text = "${formatMd(date)}  上班 ${people.size} 人"; typeface = Typeface.DEFAULT_BOLD; textSize = 17f; setTextColor(Color.rgb(30,41,59)) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                val edit = Button(this).apply { text = "调整" }
+                titleRow.addView(edit)
+                card.addView(titleRow)
+                card.addView(TextView(this).apply { text = people.joinToString("、") { it.name }.ifBlank { "无人上班" }; setTextColor(Color.rgb(71,85,105)); setPadding(0,8,0,0) })
+                edit.setOnClickListener { editCyclicDay(team, groups, allStaff, daily, dayIndex) { rebuild() } }
+                panel.addView(card)
+            }
+        }
+        rebuild(); scroll.addView(panel)
+        AlertDialog.Builder(this).setTitle("循环排班预览").setView(scroll)
+            .setPositiveButton("保存导入") { _, _ -> saveCyclicSchedule(team, daily) }
+            .setNegativeButton("取消", null).show()
+    }
+
+    private fun editCyclicDay(team: Team, groups: List<Group>, allStaff: List<Staff>, daily: MutableList<Pair<LocalDate, MutableList<Staff>>>, dayIndex: Int, changed: () -> Unit) {
+        val current = daily[dayIndex].second
+        val checks = allStaff.sortedBy { it.groupId }.map { person -> android.widget.CheckBox(this).apply { text = "${groups.firstOrNull { it.id == person.groupId }?.name.orEmpty()} · ${person.name}${if (person.role == "班长") "（班长）" else ""}"; isChecked = current.any { it.id == person.id } } }
+        val scroll = ScrollView(this)
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 0) }
+        checks.forEach { panel.addView(it) }; scroll.addView(panel)
+        AlertDialog.Builder(this).setTitle("调整 ${formatMd(daily[dayIndex].first)} 上班人员").setView(scroll)
+            .setPositiveButton("确定") { _, _ ->
+                daily[dayIndex] = daily[dayIndex].copy(second = allStaff.filter { person -> checks[allStaff.indexOf(person)].isChecked }.toMutableList())
+                changed()
+            }.setNegativeButton("取消", null).show()
+    }
+
+    private fun saveCyclicSchedule(team: Team, daily: List<Pair<LocalDate, MutableList<Staff>>>) = lifecycleScope.launch {
+        if (daily.isNotEmpty()) {
+            val snapshot = db.dao().allSchedules().filter { it.teamId == team.id }
+            db.dao().insertHistory(ScheduleImportHistory(teamId = team.id, createdAt = System.currentTimeMillis(), snapshotJson = scheduleSnapshotJson(snapshot)))
+        }
+        daily.forEach { (date, people) ->
+            db.dao().upsertSchedule(ScheduleRecord(teamId = team.id, dateKey = dateKey(date), mode = "WORK", staffIds = people.map { it.id }.distinct()))
+        }
+        db.dao().trimHistory(team.id)
+        Toast.makeText(this@MainActivity, "循环排班已导入", Toast.LENGTH_SHORT).show()
+        refreshSchedule()
+    }
+
+    private fun formatMd(date: LocalDate) = "%d月%d日".format(date.monthValue, date.dayOfMonth)
+    private fun dateKey(date: LocalDate) = "%02d-%02d".format(date.monthValue, date.dayOfMonth)
 
     private fun showImportDialog() {
         val input = android.widget.EditText(this).apply { hint = "在此粘贴排班文本"; minLines = 8 }
