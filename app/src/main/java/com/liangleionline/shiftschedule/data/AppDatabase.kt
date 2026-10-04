@@ -6,13 +6,20 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface AppDao {
     @Query("SELECT * FROM Team") fun teams(): Flow<List<Team>>
+    @Query("SELECT * FROM Team") suspend fun allTeams(): List<Team>
+    @Query("SELECT * FROM `Group`") fun allGroups(): Flow<List<Group>>
     @Query("SELECT * FROM `Group` WHERE teamId=:teamId") fun groups(teamId: Long): Flow<List<Group>>
+    @Query("SELECT * FROM `Group` WHERE teamId=:teamId") suspend fun groupsOnce(teamId: Long): List<Group>
     @Query("SELECT * FROM Staff WHERE groupId IN (SELECT id FROM `Group` WHERE teamId=:teamId)") fun staffByTeam(teamId: Long): Flow<List<Staff>>
     @Query("SELECT * FROM Staff") suspend fun allStaff(): List<Staff>
     @Query("SELECT * FROM NameAlias") suspend fun aliases(): List<NameAlias>
     @Query("SELECT * FROM ScheduleRecord WHERE teamId=:teamId AND dateKey=:dateKey") suspend fun schedule(teamId: Long, dateKey: String): ScheduleRecord?
     @Insert suspend fun insertTeam(team: Team): Long
+    @Update suspend fun updateTeam(team: Team)
+    @Delete suspend fun deleteTeam(team: Team)
     @Insert suspend fun insertGroup(group: Group): Long
+    @Update suspend fun updateGroup(group: Group)
+    @Delete suspend fun deleteGroup(group: Group)
     @Insert suspend fun insertStaff(staff: Staff): Long
     @Update suspend fun updateStaff(staff: Staff)
     @Delete suspend fun deleteStaff(staff: Staff)

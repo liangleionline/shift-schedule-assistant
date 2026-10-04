@@ -48,9 +48,11 @@ class MainActivity : AppCompatActivity() {
         teamSpinner = Spinner(this)
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0,8,0,8) }
         val import = Button(this).apply { text = "导入排班" }
+        val org = Button(this).apply { text = "组织架构" }
         val manage = Button(this).apply { text = "人员管理" }
         buttons.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         buttons.addView(import)
+        buttons.addView(org)
         buttons.addView(manage)
         val columns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         leftColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(8,8,8,8) }
@@ -66,10 +68,8 @@ class MainActivity : AppCompatActivity() {
         next.setOnClickListener { weekOffset++; renderWeek(); refreshSchedule() }
         teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener { override fun onItemSelected(p: AdapterView<*>?, v: android.view.View?, pos: Int, id: Long) { refreshSchedule() }; override fun onNothingSelected(p: AdapterView<*>?) {} }
         import.setOnClickListener { showImportDialog() }
-        manage.setOnClickListener {
-            val team = currentTeam() ?: return@setOnClickListener
-            startActivity(Intent(this, StaffManageActivity::class.java).putExtra("teamId", team.id))
-        }
+        org.setOnClickListener { startActivity(Intent(this, OrganizationActivity::class.java)) }
+        manage.setOnClickListener { startActivity(Intent(this, StaffManageActivity::class.java)) }
         observeData()
     }
 
