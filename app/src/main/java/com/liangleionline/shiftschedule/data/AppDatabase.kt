@@ -16,12 +16,22 @@ interface AppDao {
     @Query("SELECT * FROM ScheduleRecord WHERE teamId=:teamId AND dateKey=:dateKey") suspend fun schedule(teamId: Long, dateKey: String): ScheduleRecord?
     @Query("SELECT * FROM Team WHERE name=:name LIMIT 1") suspend fun teamByName(name: String): Team?
     @Query("SELECT * FROM `Group` WHERE teamId=:teamId AND name=:name LIMIT 1") suspend fun groupByName(teamId: Long, name: String): Group?
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertTeamIgnore(team: Team): Long
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertGroupIgnore(group: Group): Long
     @Insert suspend fun insertTeam(team: Team): Long
     @Update suspend fun updateTeam(team: Team)
     @Delete suspend fun deleteTeam(team: Team)
     @Insert suspend fun insertGroup(group: Group): Long
-    @Transaction suspend fun insertUniqueTeam(name: String): Long = teamByName(name)?.id ?: insertTeam(Team(name = name))
-    @Transaction suspend fun insertUniqueGroup(teamId: Long, name: String): Long = groupByName(teamId, name)?.id ?: insertGroup(Group(teamId = teamId, name = name))
+    @Transaction suspend fun insertUniqueTeam(name: String): Long {
+        teamByName(name)?.let { return it.id }
+        val inserted = insertTeamIgnore(Team(name = name))
+        return if (inserted >= 0) inserted else teamByName(name)?.id ?: insertTeam(Team(name = name))
+    }
+    @Transaction suspend fun insertUniqueGroup(teamId: Long, name: String): Long {
+        groupByName(teamId, name)?.let { return it.id }
+        val inserted = insertGroupIgnore(Group(teamId = teamId, name = name))
+        return if (inserted >= 0) inserted else groupByName(teamId, name)?.id ?: insertGroup(Group(teamId = teamId, name = name))
+    }
     @Update suspend fun updateGroup(group: Group)
     @Delete suspend fun deleteGroup(group: Group)
     @Insert suspend fun insertStaff(staff: Staff): Long

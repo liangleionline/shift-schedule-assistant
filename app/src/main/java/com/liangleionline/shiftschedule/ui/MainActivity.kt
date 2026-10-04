@@ -27,6 +27,7 @@ class MainActivity : AppCompatActivity() {
     private val baseDate = LocalDate.now()
     private var selectedDate = LocalDate.now()
     private var weekOffset = 0L
+    private var firstSetupShown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,7 +85,15 @@ class MainActivity : AppCompatActivity() {
             val adapter = ArrayAdapter(this@MainActivity, com.liangleionline.shiftschedule.R.layout.item_spinner, list.map { it.name })
             adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             teamSpinner.adapter = adapter
-            if (list.isEmpty()) showFirstSetup() else renderWeek(); refreshSchedule()
+            if (list.isEmpty()) {
+                if (!firstSetupShown) {
+                    firstSetupShown = true
+                    showFirstSetup()
+                }
+            } else {
+                renderWeek()
+                refreshSchedule()
+            }
         }
     }
 
@@ -144,11 +153,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun showFirstSetup() {
         val input = android.widget.EditText(this).apply { hint = "输入班名" }
-        AlertDialog.Builder(this).setTitle("首次使用，请先完善组织架构").setView(input).setPositiveButton("新建班") { _, _ -> lifecycleScope.launch {
-            val tid = db.dao().insertUniqueTeam(input.text.toString().ifBlank { "一班" })
-            val gid = db.dao().insertUniqueGroup(tid, "第一组")
-            db.dao().insertStaff(Staff(groupId = gid, name = "新班长", role = "班长"))
-        }}.setCancelable(false).show()
+        val dialog = AlertDialog.Builder(this).setTitle("首次使用，请先完善组织架构").setView(input).setPositiveButton("新建班", null).setCancelable(false).show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { button ->
+            button.isEnabled = false
+            lifecycleScope.launch {
+                val teamName = input.text.toString().ifBlank { "一班" }
+                val tid = db.dao().insertUniqueTeam(teamName)
+                val gid = db.dao().insertUniqueGroup(tid, "第一组")
+                if (db.dao().staffByGroup(gid).none { it.role == "班长" }) {
+                    db.dao().insertStaff(Staff(groupId = gid, name = "新班长", role = "班长"))
+                }
+                dialog.dismiss()
+            }
+        }
     }
 
     private fun showImportDialog() {
