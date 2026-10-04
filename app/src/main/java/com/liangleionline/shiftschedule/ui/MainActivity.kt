@@ -7,6 +7,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -32,7 +33,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,252)); setPadding(20,24,20,18) }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,252)); setPadding(20, statusBarInset() + 24,20,18) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         header.addView(TextView(this).apply { text = "班组排班助手"; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(20,34,58)) })
         header.addView(TextView(this).apply { text = "查看今日上班与休息安排"; textSize = 14f; setTextColor(Color.rgb(99,115,139)); setPadding(0,6,0,0) })
@@ -72,6 +73,11 @@ class MainActivity : AppCompatActivity() {
         org.setOnClickListener { startActivity(Intent(this, OrganizationActivity::class.java)) }
         manage.setOnClickListener { startActivity(Intent(this, StaffManageActivity::class.java)) }
         observeData()
+    }
+
+    private fun statusBarInset(): Int {
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else 0
     }
 
     private fun LinearLayout.LayoutParams.withMargins(l: Int,t:Int,r:Int,b:Int) = apply { setMargins(l,t,r,b) }
@@ -177,30 +183,95 @@ class MainActivity : AppCompatActivity() {
     private fun importText(text: String) = lifecycleScope.launch {
         val team = currentTeam() ?: return@launch
         val mode = ScheduleParser.detectMode(text)
-        val staff = db.dao().allStaff().filter { person -> db.dao().groups(team.id).first().any { it.id == person.groupId } }
-        val aliases = db.dao().aliases().associate { it.rawName to it.staffId }
-        ScheduleParser.parse(text).forEach { line ->
-            val ids = mutableListOf<Long>()
-            line.rawNames.forEach { raw ->
-                val aliased = aliases[raw]
-                val exact = staff.firstOrNull { it.name == raw }
-                val candidate = exact ?: aliased?.let { a -> staff.firstOrNull { it.id == a } }
-                when {
-                    candidate != null -> ids += candidate.id
-                    else -> {
-                        val fuzzy = ScheduleParser.fuzzyCandidates(raw, staff)
-                        if (fuzzy.size == 1) { ids += fuzzy.first().id; db.dao().saveAlias(NameAlias(raw, fuzzy.first().id)) }
-                        else runOnUiThread { showUnknownPicker(raw, staff, fuzzy) { chosen -> chosen?.let { ids += it.id; lifecycleScope.launch { db.dao().saveAlias(NameAlias(raw, it.id)) } } } }
+        val parsedLines = ScheduleParser.parse(text)
+        var staff = db.dao().allStaff().filter { person -> db.dao().groups(team.id).first().any { it.id == person.groupId } }
+        val aliases = db.dao().aliases().associate { it.rawName to it.staffId }.toMutableMap()
+        val handledRawNames = mutableSetOf<String>()
+        val resolvedRawToStaff = mutableMapOf<String, Staff?>()
+
+        parsedLines.flatMap { it.rawNames }.distinct().forEach { raw ->
+            val aliased = aliases[raw]?.let { id -> staff.firstOrNull { it.id == id } }
+            val exact = staff.firstOrNull { it.name == raw }
+            val candidate = exact ?: aliased
+            when {
+                candidate != null -> resolvedRawToStaff[raw] = candidate
+                else -> {
+                    val fuzzy = ScheduleParser.fuzzyCandidates(raw, staff)
+                    when {
+                        fuzzy.size == 1 -> {
+                            resolvedRawToStaff[raw] = fuzzy.first()
+                            db.dao().saveAlias(NameAlias(raw, fuzzy.first().id))
+                        }
+                        raw in handledRawNames -> Unit
+                        else -> {
+                            handledRawNames += raw
+                            val chosen = showUnknownPickerAndWait(raw, staff, fuzzy, team)
+                            if (chosen != null) {
+                                resolvedRawToStaff[raw] = chosen
+                                db.dao().saveAlias(NameAlias(raw, chosen.id))
+                                if (staff.none { it.id == chosen.id }) staff = staff + chosen
+                            }
+                        }
                     }
                 }
             }
-            db.dao().upsertSchedule(ScheduleRecord(teamId = team.id, dateKey = line.dateKey, mode = mode, staffIds = ids.distinct()))
+        }
+
+        parsedLines.forEach { line ->
+            val ids = line.rawNames.mapNotNull { raw -> resolvedRawToStaff[raw]?.id }.distinct()
+            db.dao().upsertSchedule(ScheduleRecord(teamId = team.id, dateKey = line.dateKey, mode = mode, staffIds = ids))
         }
         refreshSchedule()
     }
 
-    private fun showUnknownPicker(raw: String, staff: List<Staff>, candidates: List<Staff>, callback: (Staff?) -> Unit) {
-        val options = (if (candidates.isNotEmpty()) candidates else staff).map { it.name }.toMutableList().apply { add("忽略") }
-        AlertDialog.Builder(this).setTitle("无法确定：$raw").setItems(options.toTypedArray()) { _, i -> if (i < options.lastIndex) callback(staff.getOrNull(i)) else callback(null) }.show()
+    private sealed class UnknownChoice {
+        data class Existing(val staff: Staff) : UnknownChoice()
+        object Ignore : UnknownChoice()
+    }
+
+    private suspend fun showUnknownPickerAndWait(raw: String, staff: List<Staff>, candidates: List<Staff>, team: Team): Staff? {
+        val result = java.util.concurrent.ArrayBlockingQueue<UnknownChoice>(1)
+        runOnUiThread {
+            val candidateNames = (if (candidates.isNotEmpty()) candidates else staff).map { it.name }
+            val options = candidateNames + listOf("新增人员", "忽略")
+            AlertDialog.Builder(this).setTitle("无法确定：$raw").setItems(options.toTypedArray()) { _, i ->
+                when {
+                    i < candidateNames.size -> result.put(UnknownChoice.Existing((if (candidates.isNotEmpty()) candidates else staff)[i]))
+                    i == candidateNames.size -> showAddUnknownStaffDialog(raw, team, result)
+                    else -> result.put(UnknownChoice.Ignore)
+                }
+            }.setOnCancelListener { result.put(UnknownChoice.Ignore) }.show()
+        }
+        return when (val choice = result.take()) {
+            is UnknownChoice.Existing -> choice.staff
+            UnknownChoice.Ignore -> null
+        }
+    }
+
+    private fun showAddUnknownStaffDialog(raw: String, team: Team, result: java.util.concurrent.ArrayBlockingQueue<UnknownChoice>) {
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(28, 12, 28, 0) }
+        val nameInput = android.widget.EditText(this).apply { setText(raw) }
+        val groupSpinner = Spinner(this)
+        var groups = emptyList<Group>()
+        lifecycleScope.launch {
+            groups = db.dao().groupsOnce(team.id)
+            groupSpinner.adapter = ArrayAdapter(this@MainActivity, com.liangleionline.shiftschedule.R.layout.item_spinner, groups.map { it.name })
+        }
+        panel.addView(android.widget.TextView(this).apply { text = "姓名" })
+        panel.addView(nameInput)
+        panel.addView(android.widget.TextView(this).apply { text = "添加到小组"; setPadding(0, 14, 0, 0) })
+        panel.addView(groupSpinner)
+        AlertDialog.Builder(this).setTitle("新增人员：$raw").setView(panel).setPositiveButton("保存") { _, _ ->
+            val name = nameInput.text.toString().trim()
+            val group = groups.getOrNull(groupSpinner.selectedItemPosition)
+            if (name.isBlank() || group == null) {
+                Toast.makeText(this, "请填写姓名并选择小组", Toast.LENGTH_SHORT).show()
+                result.put(UnknownChoice.Ignore)
+            } else lifecycleScope.launch {
+                val created = Staff(groupId = group.id, name = name, role = "组员")
+                val id = db.dao().insertStaff(created)
+                result.put(UnknownChoice.Existing(created.copy(id = id)))
+            }
+        }.setNegativeButton("取消") { _, _ -> result.put(UnknownChoice.Ignore) }.show()
     }
 }
