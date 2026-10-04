@@ -70,6 +70,6 @@ interface AppDao {
     }
 }
 
-@Database(entities = [Team::class, Group::class, Staff::class, NameAlias::class, ScheduleRecord::class], version = 2, exportSchema = false)
+@Database(entities = [Team::class, Group::class, Staff::class, NameAlias::class, ScheduleRecord::class], version = 3, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() { abstract fun dao(): AppDao }

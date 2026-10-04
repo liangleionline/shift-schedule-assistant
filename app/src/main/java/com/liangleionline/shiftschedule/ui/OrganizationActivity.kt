@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.room.Room
 import com.liangleionline.shiftschedule.R
 import com.liangleionline.shiftschedule.data.*
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class OrganizationActivity : AppCompatActivity() {
@@ -19,9 +20,9 @@ class OrganizationActivity : AppCompatActivity() {
     private lateinit var teamSpinner: Spinner
     private lateinit var groupList: LinearLayout
     private var teams = listOf<Team>()
-    private var groups = listOf<Group>()
     private var selectedTeam: Team? = null
     private var suppressTeamCallback = true
+    private var renderJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,26 +52,49 @@ class OrganizationActivity : AppCompatActivity() {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 if (suppressTeamCallback) return
                 selectedTeam = teams.getOrNull(position)
-                loadGroups()
+                render()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         addTeam.setOnClickListener { button ->
             button.isEnabled = false
             textInputDialog("新增班", "请输入班名", onDismiss = { button.isEnabled = true }) { name ->
-                lifecycleScope.launch { db.dao().insertUniqueTeam(name); reloadTeams(addNewest = true); button.isEnabled = true }
+                lifecycleScope.launch {
+                    db.dao().insertUniqueTeam(name)
+                    button.isEnabled = true
+                    render(selectNewestTeam = true)
+                }
             }
         }
-        renameTeam.setOnClickListener { val t = selectedTeam ?: return@setOnClickListener; textInputDialog("修改班名", "请输入新的班名", t.name) { name -> lifecycleScope.launch { db.dao().updateTeam(t.copy(name = name)); reloadTeams(addNewest = false, keepSelectedId = t.id) } } }
-        deleteTeam.setOnClickListener { val t = selectedTeam ?: return@setOnClickListener; confirm("删除班", "删除「${t.name}」会同时删除其小组和人员，确定删除？") { lifecycleScope.launch { db.dao().deleteTeam(t); reloadTeams(addNewest = false) } } }
+        renameTeam.setOnClickListener {
+            val t = selectedTeam ?: return@setOnClickListener
+            textInputDialog("修改班名", "请输入新的班名", t.name) { name ->
+                lifecycleScope.launch { db.dao().updateTeam(t.copy(name = name)); render(keepTeamId = t.id) }
+            }
+        }
+        deleteTeam.setOnClickListener {
+            val t = selectedTeam ?: return@setOnClickListener
+            confirm("删除班", "删除「${t.name}」会同时删除其小组和人员，确定删除？") {
+                lifecycleScope.launch { db.dao().deleteTeam(t); render(selectFirstTeam = true) }
+            }
+        }
         addGroup.setOnClickListener { button ->
             button.isEnabled = false
-            val t = selectedTeam ?: run { button.isEnabled = true; return@setOnClickListener }
+            val team = selectedTeam ?: run { button.isEnabled = true; return@setOnClickListener }
             textInputDialog("新增小组", "请输入小组名称", onDismiss = { button.isEnabled = true }) { name ->
-                lifecycleScope.launch { db.dao().insertUniqueGroup(t.id, name); loadGroups(); button.isEnabled = true }
+                lifecycleScope.launch {
+                    db.dao().insertUniqueGroup(team.id, name)
+                    button.isEnabled = true
+                    render(keepTeamId = team.id)
+                }
             }
         }
-        reloadTeams(addNewest = false)
+        render(selectFirstTeam = true)
+    }
+
+    override fun onDestroy() {
+        renderJob?.cancel()
+        super.onDestroy()
     }
 
     private fun statusBarInset(): Int {
@@ -78,52 +102,107 @@ class OrganizationActivity : AppCompatActivity() {
         return if (id > 0) resources.getDimensionPixelSize(id) else 0
     }
 
-    private fun reloadTeams(keepSelectedId: Long? = null, addNewest: Boolean): kotlinx.coroutines.Job = lifecycleScope.launch {
-        db.dao().cleanupDuplicates()
-        teams = db.dao().allTeams()
-        val adapter = ArrayAdapter(this@OrganizationActivity, R.layout.item_spinner, teams.map { it.name })
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        suppressTeamCallback = true
-        teamSpinner.adapter = adapter
-        selectedTeam = when {
-            keepSelectedId != null -> teams.firstOrNull { it.id == keepSelectedId }
-            addNewest -> teams.maxByOrNull { it.id }
-            else -> selectedTeam?.let { current -> teams.firstOrNull { it.id == current.id } } ?: teams.firstOrNull()
+    private fun render(
+        keepTeamId: Long? = selectedTeam?.id,
+        selectNewestTeam: Boolean = false,
+        selectFirstTeam: Boolean = false
+    ) {
+        renderJob?.cancel()
+        renderJob = lifecycleScope.launch {
+            // 先在 UI 线程标记旧卡片失效；后续所有 addView 只来自本次协程。
+            groupList.removeAllViews()
+            val latestTeams = db.dao().allTeams().distinctBy { it.id }.sortedBy { it.id }
+            teams = latestTeams
+            val teamToSelect = when {
+                selectFirstTeam -> latestTeams.firstOrNull()
+                selectNewestTeam -> latestTeams.maxByOrNull { it.id }
+                keepTeamId != null -> latestTeams.firstOrNull { it.id == keepTeamId }
+                else -> selectedTeam?.let { current -> latestTeams.firstOrNull { it.id == current.id } } ?: latestTeams.firstOrNull()
+            }
+            selectedTeam = teamToSelect
+
+            val teamNames = latestTeams.map { it.name }
+            val adapter = ArrayAdapter(this@OrganizationActivity, R.layout.item_spinner, teamNames)
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            suppressTeamCallback = true
+            teamSpinner.adapter = adapter
+            val selectedIndex = latestTeams.indexOfFirst { it.id == teamToSelect?.id }
+            if (selectedIndex >= 0) teamSpinner.setSelection(selectedIndex)
+            suppressTeamCallback = false
+
+            groupList.removeAllViews()
+            val team = teamToSelect
+            if (team == null) {
+                addEmptyGroupMessage("暂无班组")
+                return@launch
+            }
+
+            // 数据库快照 + UI 前再次按 id 去重；正常情况下这里不会有重复项。
+            val groupsSnapshot = db.dao().groupsOnce(team.id).distinctBy { it.id }.sortedBy { it.id }
+            if (groupsSnapshot.isEmpty()) {
+                addEmptyGroupMessage("暂无小组，请点击右上角新增")
+                return@launch
+            }
+
+            groupsSnapshot.forEach { group ->
+                val count = db.dao().staffByGroup(group.id).size
+                addGroupCard(group, count)
+            }
         }
-        val index = teams.indexOfFirst { it.id == selectedTeam?.id }.coerceAtLeast(0)
-        if (teams.isNotEmpty()) teamSpinner.setSelection(index)
-        suppressTeamCallback = false
-        loadGroups()
     }
 
-    private fun loadGroups(): kotlinx.coroutines.Job = lifecycleScope.launch {
-        groupList.removeAllViews()
-        val team = selectedTeam
-        groups = if (team == null) emptyList() else db.dao().groupsOnce(team.id)
-        if (groups.isEmpty()) groupList.addView(TextView(this@OrganizationActivity).apply { text = "暂无小组，请点击右上角新增"; setPadding(12,28,12,28); setTextColor(Color.GRAY) })
-        groups.forEach { group ->
-            val count = db.dao().staffByGroup(group.id).size
-            val card = LinearLayout(this@OrganizationActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(20,16,16,16)
-                background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 24f; setColor(Color.WHITE); setStroke(1, Color.rgb(226,232,240)) } }
-            val info = LinearLayout(this@OrganizationActivity).apply { orientation = LinearLayout.VERTICAL }
-            info.addView(TextView(this@OrganizationActivity).apply { text = group.name; textSize = 18f; typeface = Typeface.DEFAULT_BOLD })
-            info.addView(TextView(this@OrganizationActivity).apply { text = "$count 人"; textSize = 13f; setTextColor(Color.GRAY); setPadding(0,4,0,0) })
-            val rename = Button(this@OrganizationActivity).apply { text = "改名" }
-            val delete = Button(this@OrganizationActivity).apply { text = "删除" }
-            rename.setOnClickListener { textInputDialog("修改小组名", "请输入新的小组名称", group.name) { name -> lifecycleScope.launch { db.dao().updateGroup(group.copy(name = name)); loadGroups() } } }
-            delete.setOnClickListener { confirm("删除小组", "删除「${group.name}」会同时删除组内人员，确定删除？") { lifecycleScope.launch { db.dao().deleteGroup(group); loadGroups() } } }
-            card.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)); card.addView(rename); card.addView(delete)
-            card.layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 14 }
-            groupList.addView(card)
+    private fun addEmptyGroupMessage(text: String) {
+        groupList.addView(TextView(this).apply {
+            this.text = text
+            setPadding(12,28,12,28)
+            setTextColor(Color.GRAY)
+        })
+    }
+
+    private fun addGroupCard(group: Group, count: Int) {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(20,16,16,16)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 24f
+                setColor(Color.WHITE)
+                setStroke(1, Color.rgb(226,232,240))
+            }
         }
+        val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        info.addView(TextView(this).apply { text = group.name; textSize = 18f; typeface = Typeface.DEFAULT_BOLD })
+        info.addView(TextView(this).apply { text = "$count 人"; textSize = 13f; setTextColor(Color.GRAY); setPadding(0,4,0,0) })
+        val rename = Button(this).apply { text = "改名" }
+        val delete = Button(this).apply { text = "删除" }
+        rename.setOnClickListener {
+            textInputDialog("修改小组名", "请输入新的小组名称", group.name) { name ->
+                lifecycleScope.launch { db.dao().updateGroup(group.copy(name = name)); render(keepTeamId = group.teamId) }
+            }
+        }
+        delete.setOnClickListener {
+            confirm("删除小组", "删除「${group.name}」会同时删除组内人员，确定删除？") {
+                lifecycleScope.launch { db.dao().deleteGroup(group); render(keepTeamId = group.teamId) }
+            }
+        }
+        card.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        card.addView(rename)
+        card.addView(delete)
+        card.layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 14 }
+        groupList.addView(card)
     }
 
     private fun textInputDialog(title: String, hint: String, old: String = "", onDismiss: (() -> Unit)? = null, action: (String) -> Unit) {
         val input = EditText(this).apply { setText(old); this.hint = hint }
         AlertDialog.Builder(this).setTitle(title).setView(input).setPositiveButton("保存") { _, _ ->
             val value = input.text.toString().trim()
-            if (value.isNotBlank()) action(value) else { Toast.makeText(this, "名称不能为空", Toast.LENGTH_SHORT).show(); onDismiss?.invoke() }
+            if (value.isNotBlank()) action(value) else {
+                Toast.makeText(this, "名称不能为空", Toast.LENGTH_SHORT).show()
+                onDismiss?.invoke()
+            }
         }.setNegativeButton("取消") { _, _ -> onDismiss?.invoke() }.setOnCancelListener { onDismiss?.invoke() }.show()
     }
-    private fun confirm(title: String, msg: String, action: () -> Unit) = AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton("确定") { _, _ -> action() }.setNegativeButton("取消", null).show()
+
+    private fun confirm(title: String, msg: String, action: () -> Unit) =
+        AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton("确定") { _, _ -> action() }.setNegativeButton("取消", null).show()
 }
