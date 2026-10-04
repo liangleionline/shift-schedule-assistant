@@ -14,6 +14,10 @@ interface AppDao {
     @Insert suspend fun insertTeam(team: Team): Long
     @Insert suspend fun insertGroup(group: Group): Long
     @Insert suspend fun insertStaff(staff: Staff): Long
+    @Update suspend fun updateStaff(staff: Staff)
+    @Delete suspend fun deleteStaff(staff: Staff)
+    @Query("SELECT COUNT(*) FROM Staff WHERE groupId=:groupId AND role='班长'") suspend fun leaderCount(groupId: Long): Int
+    @Query("SELECT * FROM Staff WHERE groupId=:groupId ORDER BY CASE WHEN role='班长' THEN 0 ELSE 1 END, id") suspend fun staffByGroup(groupId: Long): List<Staff>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveAlias(alias: NameAlias)
     @Upsert suspend fun upsertSchedule(record: ScheduleRecord)
     @Query("DELETE FROM ScheduleRecord") suspend fun clearSchedules()

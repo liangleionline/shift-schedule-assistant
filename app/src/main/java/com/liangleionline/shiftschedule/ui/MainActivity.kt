@@ -1,13 +1,16 @@
 package com.liangleionline.shiftschedule.ui
 
 import android.app.AlertDialog
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.room.Room
-import com.liangleionline.shiftschedule.R
 import com.liangleionline.shiftschedule.ScheduleParser
 import com.liangleionline.shiftschedule.data.*
 import kotlinx.coroutines.flow.first
@@ -27,34 +30,53 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db")
-            .fallbackToDestructiveMigration()
-            .build()
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16,16,16,16) }
+        db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,252)); setPadding(20,24,20,18) }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        header.addView(TextView(this).apply { text = "班组排班助手"; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(20,34,58)) })
+        header.addView(TextView(this).apply { text = "查看今日上班与休息安排"; textSize = 14f; setTextColor(Color.rgb(99,115,139)); setPadding(0,6,0,0) })
+        val weekCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(14,14,14,14) }
+        weekCard.background = rounded(Color.WHITE, 28f, Color.rgb(226,232,240))
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val prev = Button(this).apply { text = "上一周" }
-        val next = Button(this).apply { text = "下一周" }
-        weekContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; weightSum = 7f }
+        val prev = Button(this).apply { text = "‹ 上一周" }
+        val next = Button(this).apply { text = "下一周 ›" }
+        weekContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; weightSum = 7f; setPadding(0,10,0,0) }
         top.addView(prev, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        top.addView(weekContainer, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 4f))
+        top.addView(TextView(this).apply { text = "本周"; gravity = Gravity.CENTER; setTypeface(typeface, Typeface.BOLD) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         top.addView(next, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        weekCard.addView(top); weekCard.addView(weekContainer)
         teamSpinner = Spinner(this)
+        val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0,8,0,8) }
         val import = Button(this).apply { text = "导入排班" }
         val manage = Button(this).apply { text = "人员管理" }
+        buttons.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        buttons.addView(import)
+        buttons.addView(manage)
         val columns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         leftColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(8,8,8,8) }
         rightColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(8,8,8,8) }
         columns.addView(ScrollView(this).apply { addView(leftColumn) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         columns.addView(ScrollView(this).apply { addView(rightColumn) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        root.addView(top); root.addView(teamSpinner); root.addView(import); root.addView(manage); root.addView(columns, LinearLayout.LayoutParams(-1,0,1f))
+        root.addView(header)
+        root.addView(weekCard, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).withMargins(0,18,0,12))
+        root.addView(buttons, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).withMargins(0,0,0,8))
+        root.addView(columns, LinearLayout.LayoutParams(-1,0,1f))
         setContentView(root)
         prev.setOnClickListener { weekOffset--; renderWeek(); refreshSchedule() }
         next.setOnClickListener { weekOffset++; renderWeek(); refreshSchedule() }
         teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener { override fun onItemSelected(p: AdapterView<*>?, v: android.view.View?, pos: Int, id: Long) { refreshSchedule() }; override fun onNothingSelected(p: AdapterView<*>?) {} }
         import.setOnClickListener { showImportDialog() }
-        manage.setOnClickListener { showManageDialog() }
+        manage.setOnClickListener {
+            val team = currentTeam() ?: return@setOnClickListener
+            startActivity(Intent(this, StaffManageActivity::class.java).putExtra("teamId", team.id))
+        }
         observeData()
     }
+
+    private fun LinearLayout.LayoutParams.withMargins(l: Int,t:Int,r:Int,b:Int) = apply { setMargins(l,t,r,b) }
+    private fun rounded(fill: Int, radius: Float, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = radius; setColor(fill); stroke?.let { setStroke(1,it) } }
+
+    override fun onResume() { super.onResume(); refreshSchedule() }
 
     private fun observeData() = lifecycleScope.launch {
         db.dao().teams().collect { list ->
@@ -69,7 +91,12 @@ class MainActivity : AppCompatActivity() {
         val monday = baseDate.minusDays((baseDate.dayOfWeek.value - 1).toLong()).plusWeeks(weekOffset)
         for (i in 0..6) {
             val date = monday.plusDays(i.toLong())
-            val tv = TextView(this).apply { text = date.dayOfMonth.toString(); gravity = Gravity.CENTER; setPadding(4,12,4,12) }
+            val selected = date == selectedDate
+            val tv = TextView(this).apply {
+                text = date.dayOfMonth.toString(); gravity = Gravity.CENTER; setPadding(4,12,4,12); textSize = 16f
+                setTextColor(if (selected) Color.WHITE else Color.rgb(51,65,85)); typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                background = rounded(if (selected) Color.rgb(21,101,192) else Color.TRANSPARENT, 24f)
+            }
             tv.setOnClickListener { selectedDate = date; renderWeek(); refreshSchedule() }
             weekContainer.addView(tv, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         }
@@ -78,6 +105,7 @@ class MainActivity : AppCompatActivity() {
     private fun currentTeam(): Team? = teams.getOrNull(teamSpinner.selectedItemPosition)
 
     private fun refreshSchedule() = lifecycleScope.launch {
+        if (!::leftColumn.isInitialized) return@launch
         leftColumn.removeAllViews(); rightColumn.removeAllViews()
         val team = currentTeam() ?: return@launch
         val staff = db.dao().staffByTeam(team.id).first()
@@ -85,24 +113,35 @@ class MainActivity : AppCompatActivity() {
         val record = db.dao().schedule(team.id, selectedDate.toString().substring(5))
         val working = if (record == null) emptyList() else if (record.mode == "WORK") staff.filter { it.id in record.staffIds } else staff.filterNot { it.id in record.staffIds }
         val resting = staff - working.toSet()
-        renderColumn(leftColumn, "当天上班", groups, working)
-        renderColumn(rightColumn, "当天休息", groups, resting)
+        renderColumn(leftColumn, "当天上班", Color.rgb(220,252,231), Color.rgb(22,101,52), groups, working)
+        renderColumn(rightColumn, "当天休息", Color.rgb(241,245,249), Color.rgb(71,85,105), groups, resting)
     }
 
-    private fun renderColumn(container: LinearLayout, title: String, groups: List<Group>, staff: List<Staff>) {
-        container.addView(TextView(this).apply { text = title; textSize = 20f; setPadding(8,12,8,12) })
+    private fun renderColumn(container: LinearLayout, title: String, badgeBg: Int, badgeText: Int, groups: List<Group>, staff: List<Staff>) {
+        val titleCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(18,18,18,18); background = rounded(badgeBg, 24f) }
+        titleCard.addView(TextView(this).apply { text = title; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(badgeText) })
+        titleCard.addView(TextView(this).apply { text = "${staff.size} 人"; textSize = 13f; setTextColor(badgeText); setPadding(0,6,0,0) })
+        container.addView(titleCard, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 12; rightMargin = 6; leftMargin = 6 })
         groups.forEach { g ->
             val people = staff.filter { it.groupId == g.id }.sortedByDescending { it.role == "班长" }
             if (people.isNotEmpty()) {
-                container.addView(TextView(this).apply { text = g.name; setPadding(8,12,8,4) })
-                people.forEach { person -> container.addView(TextView(this).apply { text = person.name + if (person.role == "班长") "（班长）" else ""; setPadding(16,4,8,4) }) }
+                val groupCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16,14,16,14); background = rounded(Color.WHITE,22f,Color.rgb(226,232,240)) }
+                val lp = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 12; rightMargin = 6; leftMargin = 6 }
+                groupCard.addView(TextView(this).apply { text = g.name; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(30,41,59)); setPadding(0,0,0,8) })
+                people.forEach { person ->
+                    groupCard.addView(TextView(this).apply {
+                        text = if (person.role == "班长") "● ${person.name}  · 班长" else "○ ${person.name}  · 组员"
+                        textSize = 15f; setPadding(2,6,2,6); setTextColor(if (person.role == "班长") Color.rgb(21,101,192) else Color.rgb(51,65,85))
+                    })
+                }
+                container.addView(groupCard, lp)
             }
         }
-        if (staff.isEmpty()) container.addView(TextView(this).apply { text = "暂无排班数据"; setPadding(8,16,8,8) })
+        if (staff.isEmpty()) container.addView(TextView(this).apply { text = "暂无排班数据"; gravity = Gravity.CENTER; setPadding(8,32,8,8); setTextColor(Color.rgb(100,116,139)) })
     }
 
     private fun showFirstSetup() {
-        val input = EditText(this).apply { hint = "输入班名" }
+        val input = android.widget.EditText(this).apply { hint = "输入班名" }
         AlertDialog.Builder(this).setTitle("首次使用，请先完善组织架构").setView(input).setPositiveButton("新建班") { _, _ -> lifecycleScope.launch {
             val tid = db.dao().insertTeam(Team(name = input.text.toString().ifBlank { "一班" }))
             val gid = db.dao().insertGroup(Group(teamId = tid, name = "第一组"))
@@ -110,18 +149,8 @@ class MainActivity : AppCompatActivity() {
         }}.setCancelable(false).show()
     }
 
-    private fun showManageDialog() {
-        val input = EditText(this).apply { hint = "姓名，职位默认组员" }
-        AlertDialog.Builder(this).setTitle("添加人员到第一组（演示）").setView(input).setPositiveButton("添加") { _, _ -> lifecycleScope.launch {
-            val team = currentTeam() ?: return@launch
-            val gid = db.dao().groups(team.id).first().firstOrNull()?.id ?: return@launch
-            db.dao().insertStaff(Staff(groupId = gid, name = input.text.toString()))
-            refreshSchedule()
-        }}.setNegativeButton("取消", null).show()
-    }
-
     private fun showImportDialog() {
-        val input = EditText(this).apply { hint = "在此粘贴排班文本"; minLines = 8 }
+        val input = android.widget.EditText(this).apply { hint = "在此粘贴排班文本"; minLines = 8 }
         AlertDialog.Builder(this).setTitle("导入排班").setView(input).setPositiveButton("解析并导入") { _, _ -> importText(input.text.toString()) }.setNegativeButton("清空") { _, _ -> input.setText("") }.show()
     }
 
