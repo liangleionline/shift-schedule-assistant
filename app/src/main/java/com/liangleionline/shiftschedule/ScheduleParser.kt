@@ -25,7 +25,11 @@ object ScheduleParser {
         setOf('石','时','史','士')
     )
 
-    fun detectMode(text: String): String = if (text.contains("休息")) "REST" else "WORK"
+    fun detectMode(text: String): String = when {
+        text.contains("休息") -> "REST"
+        text.contains("上班") -> "WORK"
+        else -> "WORK"
+    }
 
     fun parse(text: String): List<ParsedLine> = text.lineSequence().mapNotNull { line ->
         val regex = Regex("""(\d{1,2})\s*[月.]\s*(\d{1,2})\s*日?""")

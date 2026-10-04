@@ -18,7 +18,9 @@ import com.liangleionline.shiftschedule.data.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.time.LocalDate
+import kotlin.coroutines.resume
 
 class MainActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
@@ -266,31 +268,24 @@ class MainActivity : AppCompatActivity() {
         refreshSchedule()
     }
 
-    private sealed class UnknownChoice {
-        data class Existing(val staff: Staff) : UnknownChoice()
-        object Ignore : UnknownChoice()
-    }
-
     private suspend fun showUnknownPickerAndWait(raw: String, staff: List<Staff>, candidates: List<Staff>, team: Team): Staff? {
-        val result = java.util.concurrent.ArrayBlockingQueue<UnknownChoice>(1)
-        runOnUiThread {
+        return suspendCancellableCoroutine { continuation ->
             val candidateNames = (if (candidates.isNotEmpty()) candidates else staff).map { it.name }
             val options = candidateNames + listOf("新增人员", "忽略")
-            AlertDialog.Builder(this).setTitle("无法确定：$raw").setItems(options.toTypedArray()) { _, i ->
+            val dialog = AlertDialog.Builder(this).setTitle("无法确定：$raw").setItems(options.toTypedArray()) { _, i ->
                 when {
-                    i < candidateNames.size -> result.put(UnknownChoice.Existing((if (candidates.isNotEmpty()) candidates else staff)[i]))
-                    i == candidateNames.size -> showAddUnknownStaffDialog(raw, team, result)
-                    else -> result.put(UnknownChoice.Ignore)
+                    i < candidateNames.size -> continuation.resume((if (candidates.isNotEmpty()) candidates else staff)[i])
+                    i == candidateNames.size -> showAddUnknownStaffDialog(raw, team, continuation)
+                    else -> continuation.resume(null)
                 }
-            }.setOnCancelListener { result.put(UnknownChoice.Ignore) }.show()
-        }
-        return when (val choice = result.take()) {
-            is UnknownChoice.Existing -> choice.staff
-            UnknownChoice.Ignore -> null
+            }.setOnCancelListener {
+                if (continuation.isActive) continuation.resume(null)
+            }.show()
+            continuation.invokeOnCancellation { dialog.dismiss() }
         }
     }
 
-    private fun showAddUnknownStaffDialog(raw: String, team: Team, result: java.util.concurrent.ArrayBlockingQueue<UnknownChoice>) {
+    private fun showAddUnknownStaffDialog(raw: String, team: Team, continuation: kotlinx.coroutines.CancellableContinuation<Staff?>) {
         val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(28, 12, 28, 0) }
         val nameInput = android.widget.EditText(this).apply { setText(raw) }
         val groupSpinner = Spinner(this)
@@ -308,12 +303,13 @@ class MainActivity : AppCompatActivity() {
             val group = groups.getOrNull(groupSpinner.selectedItemPosition)
             if (name.isBlank() || group == null) {
                 Toast.makeText(this, "请填写姓名并选择小组", Toast.LENGTH_SHORT).show()
-                result.put(UnknownChoice.Ignore)
             } else lifecycleScope.launch {
                 val created = Staff(groupId = group.id, name = name, role = "组员")
                 val id = db.dao().insertStaff(created)
-                result.put(UnknownChoice.Existing(created.copy(id = id)))
+                if (continuation.isActive) continuation.resume(created.copy(id = id))
             }
-        }.setNegativeButton("取消") { _, _ -> result.put(UnknownChoice.Ignore) }.show()
+        }.setNegativeButton("取消") { _, _ -> if (continuation.isActive) continuation.resume(null) }
+            .setOnCancelListener { if (continuation.isActive) continuation.resume(null) }
+            .show()
     }
 }
