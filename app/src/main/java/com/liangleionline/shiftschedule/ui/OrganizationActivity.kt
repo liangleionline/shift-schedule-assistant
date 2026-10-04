@@ -52,10 +52,21 @@ class OrganizationActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        addTeam.setOnClickListener { textInputDialog("新增班", "请输入班名") { name -> lifecycleScope.launch { db.dao().insertTeam(Team(name = name)); reloadTeams(addNewest = true) } } }
+        addTeam.setOnClickListener { button ->
+            button.isEnabled = false
+            textInputDialog("新增班", "请输入班名", onDismiss = { button.isEnabled = true }) { name ->
+                lifecycleScope.launch { db.dao().insertUniqueTeam(name); reloadTeams(addNewest = true); button.isEnabled = true }
+            }
+        }
         renameTeam.setOnClickListener { val t = selectedTeam ?: return@setOnClickListener; textInputDialog("修改班名", "请输入新的班名", t.name) { name -> lifecycleScope.launch { db.dao().updateTeam(t.copy(name = name)); reloadTeams(addNewest = false, keepSelectedId = t.id) } } }
         deleteTeam.setOnClickListener { val t = selectedTeam ?: return@setOnClickListener; confirm("删除班", "删除「${t.name}」会同时删除其小组和人员，确定删除？") { lifecycleScope.launch { db.dao().deleteTeam(t); reloadTeams(addNewest = false) } } }
-        addGroup.setOnClickListener { val t = selectedTeam ?: return@setOnClickListener; textInputDialog("新增小组", "请输入小组名称") { name -> lifecycleScope.launch { db.dao().insertGroup(Group(teamId = t.id, name = name)); loadGroups() } } }
+        addGroup.setOnClickListener { button ->
+            button.isEnabled = false
+            val t = selectedTeam ?: run { button.isEnabled = true; return@setOnClickListener }
+            textInputDialog("新增小组", "请输入小组名称", onDismiss = { button.isEnabled = true }) { name ->
+                lifecycleScope.launch { db.dao().insertUniqueGroup(t.id, name); loadGroups(); button.isEnabled = true }
+            }
+        }
         reloadTeams(addNewest = false)
     }
 
@@ -98,12 +109,12 @@ class OrganizationActivity : AppCompatActivity() {
         }
     }
 
-    private fun textInputDialog(title: String, hint: String, old: String = "", action: (String) -> Unit) {
+    private fun textInputDialog(title: String, hint: String, old: String = "", onDismiss: (() -> Unit)? = null, action: (String) -> Unit) {
         val input = EditText(this).apply { setText(old); this.hint = hint }
         AlertDialog.Builder(this).setTitle(title).setView(input).setPositiveButton("保存") { _, _ ->
             val value = input.text.toString().trim()
-            if (value.isNotBlank()) action(value) else Toast.makeText(this, "名称不能为空", Toast.LENGTH_SHORT).show()
-        }.setNegativeButton("取消", null).show()
+            if (value.isNotBlank()) action(value) else { Toast.makeText(this, "名称不能为空", Toast.LENGTH_SHORT).show(); onDismiss?.invoke() }
+        }.setNegativeButton("取消") { _, _ -> onDismiss?.invoke() }.setOnCancelListener { onDismiss?.invoke() }.show()
     }
     private fun confirm(title: String, msg: String, action: () -> Unit) = AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton("确定") { _, _ -> action() }.setNegativeButton("取消", null).show()
 }

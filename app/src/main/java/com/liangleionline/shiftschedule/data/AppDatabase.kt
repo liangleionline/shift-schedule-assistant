@@ -14,10 +14,14 @@ interface AppDao {
     @Query("SELECT * FROM Staff") suspend fun allStaff(): List<Staff>
     @Query("SELECT * FROM NameAlias") suspend fun aliases(): List<NameAlias>
     @Query("SELECT * FROM ScheduleRecord WHERE teamId=:teamId AND dateKey=:dateKey") suspend fun schedule(teamId: Long, dateKey: String): ScheduleRecord?
+    @Query("SELECT * FROM Team WHERE name=:name LIMIT 1") suspend fun teamByName(name: String): Team?
+    @Query("SELECT * FROM `Group` WHERE teamId=:teamId AND name=:name LIMIT 1") suspend fun groupByName(teamId: Long, name: String): Group?
     @Insert suspend fun insertTeam(team: Team): Long
     @Update suspend fun updateTeam(team: Team)
     @Delete suspend fun deleteTeam(team: Team)
     @Insert suspend fun insertGroup(group: Group): Long
+    @Transaction suspend fun insertUniqueTeam(name: String): Long = teamByName(name)?.id ?: insertTeam(Team(name = name))
+    @Transaction suspend fun insertUniqueGroup(teamId: Long, name: String): Long = groupByName(teamId, name)?.id ?: insertGroup(Group(teamId = teamId, name = name))
     @Update suspend fun updateGroup(group: Group)
     @Delete suspend fun deleteGroup(group: Group)
     @Insert suspend fun insertStaff(staff: Staff): Long
@@ -31,6 +35,6 @@ interface AppDao {
     @Query("DELETE FROM NameAlias WHERE rawName=:rawName") suspend fun deleteAlias(rawName: String)
 }
 
-@Database(entities = [Team::class, Group::class, Staff::class, NameAlias::class, ScheduleRecord::class], version = 1, exportSchema = false)
+@Database(entities = [Team::class, Group::class, Staff::class, NameAlias::class, ScheduleRecord::class], version = 2, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() { abstract fun dao(): AppDao }

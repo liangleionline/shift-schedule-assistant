@@ -2,8 +2,9 @@ package com.liangleionline.shiftschedule.data
 
 import androidx.room.*
 
-@Entity data class Team(@PrimaryKey(autoGenerate = true) val id: Long = 0, val name: String)
-@Entity(foreignKeys = [ForeignKey(Team::class, parentColumns = ["id"], childColumns = ["teamId"], onDelete = ForeignKey.CASCADE)], indices = [Index("teamId")])
+@Entity(indices = [Index(value=["name"], unique=true)])
+data class Team(@PrimaryKey(autoGenerate = true) val id: Long = 0, val name: String)
+@Entity(foreignKeys = [ForeignKey(Team::class, parentColumns = ["id"], childColumns = ["teamId"], onDelete = ForeignKey.CASCADE)], indices = [Index("teamId"), Index(value=["teamId","name"], unique=true)])
 data class Group(@PrimaryKey(autoGenerate = true) val id: Long = 0, val teamId: Long, val name: String)
 @Entity(foreignKeys = [ForeignKey(Group::class, parentColumns = ["id"], childColumns = ["groupId"], onDelete = ForeignKey.CASCADE)], indices = [Index("groupId")])
 data class Staff(@PrimaryKey(autoGenerate = true) val id: Long = 0, val groupId: Long, val name: String, val role: String = "组员")

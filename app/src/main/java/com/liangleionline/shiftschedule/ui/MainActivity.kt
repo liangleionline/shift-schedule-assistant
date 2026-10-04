@@ -145,8 +145,8 @@ class MainActivity : AppCompatActivity() {
     private fun showFirstSetup() {
         val input = android.widget.EditText(this).apply { hint = "输入班名" }
         AlertDialog.Builder(this).setTitle("首次使用，请先完善组织架构").setView(input).setPositiveButton("新建班") { _, _ -> lifecycleScope.launch {
-            val tid = db.dao().insertTeam(Team(name = input.text.toString().ifBlank { "一班" }))
-            val gid = db.dao().insertGroup(Group(teamId = tid, name = "第一组"))
+            val tid = db.dao().insertUniqueTeam(input.text.toString().ifBlank { "一班" })
+            val gid = db.dao().insertUniqueGroup(tid, "第一组")
             db.dao().insertStaff(Staff(groupId = gid, name = "新班长", role = "班长"))
         }}.setCancelable(false).show()
     }
