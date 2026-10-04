@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -32,6 +33,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applyDarkStatusBar()
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,252)); setPadding(20, statusBarInset() + 24,20,18) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -73,6 +75,13 @@ class MainActivity : AppCompatActivity() {
         org.setOnClickListener { startActivity(Intent(this, OrganizationActivity::class.java)) }
         manage.setOnClickListener { startActivity(Intent(this, StaffManageActivity::class.java)) }
         observeData()
+    }
+
+    private fun applyDarkStatusBar() {
+        window.statusBarColor = Color.rgb(15, 23, 42)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            window.decorView.systemUiVisibility = window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+        }
     }
 
     private fun statusBarInset(): Int {

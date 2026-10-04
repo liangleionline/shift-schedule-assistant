@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -28,6 +29,8 @@ class StaffManageActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = Color.rgb(15,23,42)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) window.decorView.systemUiVisibility = window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,252)); setPadding(22,statusBarInset() + 28,22,22) }
         root.addView(TextView(this).apply { text = "人员管理"; textSize = 26f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(20,34,58)) })
@@ -111,18 +114,27 @@ class StaffManageActivity : AppCompatActivity() {
         val panel = LinearLayout(this@StaffManageActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(28,12,28,0) }
         val nameInput = EditText(this@StaffManageActivity).apply { setText(staff?.name ?: ""); hint = "请输入姓名" }
         val teamSelect = Spinner(this@StaffManageActivity); val groupSelect = Spinner(this@StaffManageActivity)
+        var suppressDialogCallbacks = true
         val radioGroup = RadioGroup(this@StaffManageActivity).apply { orientation = RadioGroup.HORIZONTAL; setPadding(0,16,0,0) }
         val leader = RadioButton(this@StaffManageActivity).apply { text = "班长"; id = View.generateViewId() }; val member = RadioButton(this@StaffManageActivity).apply { text = "组员"; id = View.generateViewId() }
         if (staff?.role == "班长") leader.isChecked = true else member.isChecked = true
         radioGroup.addView(leader); radioGroup.addView(member)
         fun refreshGroupSpinner() { groupSelect.adapter = spinnerAdapter(dialogGroups.map { it.name }); groupSelect.setSelection(dialogGroups.indexOfFirst { it.id == chosenGroup?.id }.coerceAtLeast(0)) }
-        teamSelect.adapter = spinnerAdapter(allTeams.map { it.name }); chosenTeam?.let { teamSelect.setSelection(allTeams.indexOfFirst { t -> t.id == it.id }.coerceAtLeast(0)) }; refreshGroupSpinner()
+        teamSelect.adapter = spinnerAdapter(allTeams.map { it.name }); chosenTeam?.let { teamSelect.setSelection(allTeams.indexOfFirst { t -> t.id == it.id }.coerceAtLeast(0)) }; refreshGroupSpinner(); suppressDialogCallbacks = false
         teamSelect.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) { lifecycleScope.launch { chosenTeam = allTeams.getOrNull(pos); dialogGroups = chosenTeam?.let { db.dao().groupsOnce(it.id) } ?: emptyList(); chosenGroup = dialogGroups.firstOrNull(); refreshGroupSpinner() } }
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                if (suppressDialogCallbacks) return
+                lifecycleScope.launch {
+                    chosenTeam = allTeams.getOrNull(pos)
+                    dialogGroups = chosenTeam?.let { db.dao().groupsOnce(it.id) } ?: emptyList()
+                    chosenGroup = dialogGroups.firstOrNull { it.id == selectedGroup?.id } ?: dialogGroups.firstOrNull()
+                    refreshGroupSpinner()
+                }
+            }
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
         groupSelect.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) { chosenGroup = dialogGroups.getOrNull(pos) }
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) { if (!suppressDialogCallbacks) chosenGroup = dialogGroups.getOrNull(pos) }
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
         panel.addView(label("姓名")); panel.addView(nameInput); panel.addView(label("所属班", 14)); panel.addView(teamSelect); panel.addView(label("所属小组", 14)); panel.addView(groupSelect); panel.addView(label("职位", 14)); panel.addView(radioGroup)
