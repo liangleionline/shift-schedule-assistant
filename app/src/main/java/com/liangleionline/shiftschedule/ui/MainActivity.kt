@@ -81,7 +81,9 @@ class MainActivity : AppCompatActivity() {
     private fun observeData() = lifecycleScope.launch {
         db.dao().teams().collect { list ->
             teams = list
-            teamSpinner.adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, list.map { it.name })
+            val adapter = ArrayAdapter(this@MainActivity, com.liangleionline.shiftschedule.R.layout.item_spinner, list.map { it.name })
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            teamSpinner.adapter = adapter
             if (list.isEmpty()) showFirstSetup() else renderWeek(); refreshSchedule()
         }
     }
