@@ -189,15 +189,16 @@ class MainActivity : AppCompatActivity() {
             val working = if (record == null) emptyList() else if (record.mode == "WORK") staff.filter { it.id in record.staffIds.distinct() } else staff.filterNot { it.id in record.staffIds.distinct() }
             val resting = staff - working.toSet()
             if (generation != scheduleGeneration) return@launch
-            renderColumn(leftColumn, "当天上班", Color.rgb(220,252,231), Color.rgb(22,101,52), groups, working)
-            renderColumn(rightColumn, "当天休息", Color.rgb(241,245,249), Color.rgb(71,85,105), groups, resting)
+            renderColumn(leftColumn, "当天上班", Color.rgb(220,252,231), Color.rgb(22,101,52), groups, working, staff, working)
+            renderColumn(rightColumn, "当天休息", Color.rgb(241,245,249), Color.rgb(71,85,105), groups, resting, staff, working)
         }
     }
 
-    private fun renderColumn(container: LinearLayout, title: String, badgeBg: Int, badgeText: Int, groups: List<Group>, staff: List<Staff>) {
-        val titleCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(18,18,18,18); background = rounded(badgeBg, 24f) }
-        titleCard.addView(TextView(this).apply { text = title; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(badgeText) })
-        titleCard.addView(TextView(this).apply { text = "${staff.size} 人"; textSize = 13f; setTextColor(badgeText); setPadding(0,6,0,0) })
+    private fun renderColumn(container: LinearLayout, title: String, badgeBg: Int, badgeText: Int, groups: List<Group>, staff: List<Staff>, allStaff: List<Staff>, workingStaff: List<Staff>) {
+        val titleCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(18,18,18,18); background = rounded(badgeBg, 24f); isClickable = true }
+        titleCard.addView(TextView(this).apply { text = "$title  ✎"; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(badgeText) })
+        titleCard.addView(TextView(this).apply { text = "${staff.size} 人 · 点击编辑"; textSize = 13f; setTextColor(badgeText); setPadding(0,6,0,0) })
+        titleCard.setOnClickListener { showDayStaffEditor(allStaff, workingStaff) }
         container.addView(titleCard, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 12; rightMargin = 6; leftMargin = 6 })
         groups.forEach { g ->
             val people = staff.filter { it.groupId == g.id }.sortedByDescending { it.role == "班长" }
@@ -215,6 +216,41 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (staff.isEmpty()) container.addView(TextView(this).apply { text = "暂无排班数据"; gravity = Gravity.CENTER; setPadding(8,32,8,8); setTextColor(Color.rgb(100,116,139)) })
+    }
+
+    private fun showDayStaffEditor(allStaff: List<Staff>, workingStaff: List<Staff>) = lifecycleScope.launch {
+        val team = currentTeam() ?: return@launch
+        val groups = db.dao().groupsOnce(team.id).sortedBy { it.id }
+        val sortedStaff = allStaff.sortedWith(compareBy<Staff> { person -> groups.indexOfFirst { it.id == person.groupId } }.thenByDescending { it.role == "班长" }.thenBy { it.id })
+        val checks = sortedStaff.map { person ->
+            android.widget.CheckBox(this@MainActivity).apply {
+                val groupName = groups.firstOrNull { it.id == person.groupId }?.name.orEmpty()
+                text = "$groupName · ${person.name}${if (person.role == "班长") "（班长）" else ""}"
+                isChecked = workingStaff.any { it.id == person.id }
+            }
+        }
+        val scroll = ScrollView(this@MainActivity)
+        val panel = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 0) }
+        groups.forEach { group ->
+            val people = sortedStaff.filter { it.groupId == group.id }
+            if (people.isNotEmpty()) {
+                panel.addView(TextView(this@MainActivity).apply { text = group.name; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(30,41,59)); setPadding(0,12,0,4) })
+                people.forEach { person -> panel.addView(checks[sortedStaff.indexOf(person)]) }
+            }
+        }
+        scroll.addView(panel)
+        AlertDialog.Builder(this@MainActivity)
+            .setTitle("调整 ${formatMd(selectedDate)} 上班人员")
+            .setMessage("勾选为上班，取消勾选自动为休息。")
+            .setView(scroll)
+            .setPositiveButton("保存") { _, _ ->
+                val selectedIds = sortedStaff.mapIndexedNotNull { index, person -> if (checks[index].isChecked) person.id else null }.distinct()
+                lifecycleScope.launch {
+                    db.dao().upsertSchedule(ScheduleRecord(teamId = team.id, dateKey = dateKey(selectedDate), mode = "WORK", staffIds = selectedIds))
+                    refreshSchedule()
+                    Toast.makeText(this@MainActivity, "当天排班已更新", Toast.LENGTH_SHORT).show()
+                }
+            }.setNegativeButton("取消", null).show()
     }
 
     private fun showFirstSetup() {
