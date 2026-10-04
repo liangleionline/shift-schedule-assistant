@@ -18,6 +18,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONArray
+import org.json.JSONObject
 import java.time.LocalDate
 import kotlin.coroutines.resume
 
@@ -58,10 +60,12 @@ class MainActivity : AppCompatActivity() {
         teamSpinner = Spinner(this)
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0,8,0,8) }
         val import = Button(this).apply { text = "导入排班" }
+        val settings = Button(this).apply { text = "设置" }
         val org = Button(this).apply { text = "组织架构" }
         val manage = Button(this).apply { text = "人员管理" }
         buttons.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         buttons.addView(import)
+        buttons.addView(settings)
         buttons.addView(org)
         buttons.addView(manage)
         val columns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -86,6 +90,7 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
         import.setOnClickListener { showImportDialog() }
+        settings.setOnClickListener { startActivity(Intent(this, ScheduleSettingsActivity::class.java)) }
         org.setOnClickListener { startActivity(Intent(this, OrganizationActivity::class.java)) }
         manage.setOnClickListener { startActivity(Intent(this, StaffManageActivity::class.java)) }
         observeData()
@@ -223,7 +228,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun importText(text: String) = lifecycleScope.launch {
         val team = currentTeam() ?: return@launch
-        val mode = ScheduleParser.detectMode(text)
+        val modeStatus = ScheduleParser.detectModeStatus(text)
+        val mode = if (modeStatus == "REST") "REST" else if (modeStatus == "WORK") "WORK" else askImportModeAndWait(modeStatus) ?: return@launch
         val parsedLines = ScheduleParser.parse(text)
         var staff = db.dao().allStaff().filter { person -> db.dao().groups(team.id).first().any { it.id == person.groupId } }
         val aliases = db.dao().aliases().associate { it.rawName to it.staffId }.toMutableMap()
@@ -258,11 +264,44 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        if (parsedLines.isNotEmpty()) {
+            val beforeSnapshot = db.dao().allSchedules().filter { it.teamId == team.id }.let { records -> scheduleSnapshotJson(records) }
+            db.dao().insertHistory(ScheduleImportHistory(teamId = team.id, createdAt = System.currentTimeMillis(), snapshotJson = beforeSnapshot))
+        }
+
         parsedLines.forEach { line ->
             val ids = line.rawNames.mapNotNull { raw -> resolvedRawToStaff[raw]?.id }.distinct()
             db.dao().upsertSchedule(ScheduleRecord(teamId = team.id, dateKey = line.dateKey, mode = mode, staffIds = ids))
         }
+        if (parsedLines.isNotEmpty()) db.dao().trimHistory(team.id)
         refreshSchedule()
+    }
+
+    private fun scheduleSnapshotJson(records: List<ScheduleRecord>): String {
+        val array = JSONArray()
+        records.forEach { record ->
+            val ids = JSONArray()
+            record.staffIds.forEach { ids.put(it) }
+            array.put(JSONObject()
+                .put("id", record.id)
+                .put("dateKey", record.dateKey)
+                .put("mode", record.mode)
+                .put("staffIds", ids))
+        }
+        return array.toString()
+    }
+
+    private suspend fun askImportModeAndWait(status: String): String? {
+        val message = if (status == "AMBIGUOUS") "同时识别到了“上班”和“休息”，请选择这份排班表的类型。" else "没有识别到“上班”或“休息”，请选择这份排班表的类型。"
+        return suspendCancellableCoroutine { continuation ->
+            val dialog = AlertDialog.Builder(this).setTitle("选择排班类型").setMessage(message)
+                .setPositiveButton("上班表") { _, _ -> if (continuation.isActive) continuation.resume("WORK") }
+                .setNegativeButton("休息表") { _, _ -> if (continuation.isActive) continuation.resume("REST") }
+                .setNeutralButton("取消") { _, _ -> if (continuation.isActive) continuation.resume(null) }
+                .setOnCancelListener { if (continuation.isActive) continuation.resume(null) }
+                .show()
+            continuation.invokeOnCancellation { dialog.dismiss() }
+        }
     }
 
     private suspend fun showUnknownPickerAndWait(raw: String, staff: List<Staff>, candidates: List<Staff>, team: Team): Staff? {

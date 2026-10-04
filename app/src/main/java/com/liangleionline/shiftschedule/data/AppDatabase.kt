@@ -42,6 +42,14 @@ interface AppDao {
     @Query("SELECT * FROM Staff WHERE groupId=:groupId ORDER BY CASE WHEN role='班长' THEN 0 ELSE 1 END, id") suspend fun staffByGroup(groupId: Long): List<Staff>
     @Query("UPDATE Staff SET groupId=:targetGroupId WHERE id=:staffId") suspend fun moveStaff(staffId: Long, targetGroupId: Long)
     @Query("SELECT * FROM ScheduleRecord") suspend fun allSchedules(): List<ScheduleRecord>
+    @Query("SELECT * FROM ScheduleRecord WHERE teamId=:teamId AND dateKey BETWEEN :startKey AND :endKey ORDER BY dateKey") suspend fun schedulesInRange(teamId: Long, startKey: String, endKey: String): List<ScheduleRecord>
+    @Query("DELETE FROM ScheduleRecord WHERE teamId=:teamId AND dateKey BETWEEN :startKey AND :endKey") suspend fun deleteSchedulesInRange(teamId: Long, startKey: String, endKey: String)
+    @Query("DELETE FROM ScheduleRecord WHERE teamId=:teamId") suspend fun clearTeamSchedules(teamId: Long)
+    @Insert suspend fun insertHistory(history: ScheduleImportHistory): Long
+    @Query("SELECT COUNT(*) FROM ScheduleImportHistory WHERE teamId=:teamId") suspend fun historyCount(teamId: Long): Int
+    @Query("SELECT * FROM ScheduleImportHistory WHERE teamId=:teamId ORDER BY createdAt DESC, id DESC LIMIT 1") suspend fun latestHistory(teamId: Long): ScheduleImportHistory?
+    @Query("DELETE FROM ScheduleImportHistory WHERE id=:id") suspend fun deleteHistory(id: Long)
+    @Query("DELETE FROM ScheduleImportHistory WHERE teamId=:teamId AND id NOT IN (SELECT id FROM ScheduleImportHistory WHERE teamId=:teamId ORDER BY createdAt DESC, id DESC LIMIT 3)") suspend fun trimHistory(teamId: Long)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveAlias(alias: NameAlias)
     @Upsert suspend fun upsertSchedule(record: ScheduleRecord)
     @Query("DELETE FROM ScheduleRecord") suspend fun clearSchedules()
@@ -70,6 +78,6 @@ interface AppDao {
     }
 }
 
-@Database(entities = [Team::class, Group::class, Staff::class, NameAlias::class, ScheduleRecord::class], version = 3, exportSchema = false)
+@Database(entities = [Team::class, Group::class, Staff::class, NameAlias::class, ScheduleRecord::class, ScheduleImportHistory::class], version = 4, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() { abstract fun dao(): AppDao }

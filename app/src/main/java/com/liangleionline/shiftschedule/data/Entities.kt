@@ -11,6 +11,8 @@ data class Staff(@PrimaryKey(autoGenerate = true) val id: Long = 0, val groupId:
 @Entity data class NameAlias(@PrimaryKey val rawName: String, val staffId: Long)
 @Entity(indices = [Index(value=["teamId","dateKey"], unique=true)])
 data class ScheduleRecord(@PrimaryKey(autoGenerate = true) val id: Long = 0, val teamId: Long, val dateKey: String, val mode: String, val staffIds: List<Long>)
+@Entity(indices = [Index("teamId"), Index("createdAt")])
+data class ScheduleImportHistory(@PrimaryKey(autoGenerate = true) val id: Long = 0, val teamId: Long, val createdAt: Long, val snapshotJson: String)
 data class GroupStaff(val group: Group, val staff: List<Staff>)
 
 class Converters {

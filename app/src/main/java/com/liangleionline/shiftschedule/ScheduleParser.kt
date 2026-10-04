@@ -25,10 +25,15 @@ object ScheduleParser {
         setOf('石','时','史','士')
     )
 
-    fun detectMode(text: String): String = when {
-        text.contains("休息") -> "REST"
-        text.contains("上班") -> "WORK"
-        else -> "WORK"
+    fun detectModeStatus(text: String): String {
+        val hasRest = text.contains("休息")
+        val hasWork = text.contains("上班")
+        return when {
+            hasRest && hasWork -> "AMBIGUOUS"
+            hasRest -> "REST"
+            hasWork -> "WORK"
+            else -> "NONE"
+        }
     }
 
     fun parse(text: String): List<ParsedLine> = text.lineSequence().mapNotNull { line ->
