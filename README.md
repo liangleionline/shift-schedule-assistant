@@ -204,7 +204,3 @@ git push -u origin main
 - Tag：`v1.0.0`
 - Title：`v1.0.0 初始版本`
 - 附件：正式签名后的 `app-release.apk`
-
-## 安全提醒
-
-不要把 GitHub Personal Access Token 写入仓库、README、Gradle 文件、CI 配置或聊天记录。推荐使用 GitHub CLI 登录，或通过系统凭据管理器保存短期、最小权限 token。
