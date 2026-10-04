@@ -22,6 +22,7 @@ class OrganizationActivity : AppCompatActivity() {
     private var teams = listOf<Team>()
     private var selectedTeam: Team? = null
     private var suppressTeamCallback = true
+    private var renderGeneration = 0L
     private var renderJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,8 +51,9 @@ class OrganizationActivity : AppCompatActivity() {
 
         teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                if (suppressTeamCallback) return
-                selectedTeam = teams.getOrNull(position)
+                val newTeam = teams.getOrNull(position) ?: return
+                if (suppressTeamCallback || newTeam.id == selectedTeam?.id) return
+                selectedTeam = newTeam
                 render()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -107,10 +109,9 @@ class OrganizationActivity : AppCompatActivity() {
         selectNewestTeam: Boolean = false,
         selectFirstTeam: Boolean = false
     ) {
+        val generation = ++renderGeneration
         renderJob?.cancel()
         renderJob = lifecycleScope.launch {
-            // 先在 UI 线程标记旧卡片失效；后续所有 addView 只来自本次协程。
-            groupList.removeAllViews()
             val latestTeams = db.dao().allTeams().distinctBy { it.id }.sortedBy { it.id }
             teams = latestTeams
             val teamToSelect = when {
@@ -122,13 +123,17 @@ class OrganizationActivity : AppCompatActivity() {
             selectedTeam = teamToSelect
 
             val teamNames = latestTeams.map { it.name }
-            val adapter = ArrayAdapter(this@OrganizationActivity, R.layout.item_spinner, teamNames)
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            suppressTeamCallback = true
-            teamSpinner.adapter = adapter
-            val selectedIndex = latestTeams.indexOfFirst { it.id == teamToSelect?.id }
-            if (selectedIndex >= 0) teamSpinner.setSelection(selectedIndex)
-            suppressTeamCallback = false
+            val currentAdapter = teamSpinner.adapter as? ArrayAdapter<*>
+            if (currentAdapter == null || currentAdapter.count != teamNames.size || teamNames.indices.any { currentAdapter.getItem(it) != teamNames[it] }) {
+                val adapter = ArrayAdapter(this@OrganizationActivity, R.layout.item_spinner, teamNames)
+                adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                suppressTeamCallback = true
+                teamSpinner.adapter = adapter
+                val selectedIndex = latestTeams.indexOfFirst { it.id == teamToSelect?.id }
+                if (selectedIndex >= 0) teamSpinner.setSelection(selectedIndex)
+                suppressTeamCallback = false
+            }
+            if (generation != renderGeneration) return@launch
 
             groupList.removeAllViews()
             val team = teamToSelect
