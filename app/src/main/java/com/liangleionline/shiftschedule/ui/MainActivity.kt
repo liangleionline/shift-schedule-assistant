@@ -133,7 +133,7 @@ class MainActivity : AppCompatActivity() {
 
         prev.setOnClickListener { weekOffset--; renderWeek(); refreshSchedule() }
         next.setOnClickListener { weekOffset++; renderWeek(); refreshSchedule() }
-        weekTitle.setOnClickListener { weekOffset = 0L; selectedDate = LocalDate.now(); renderWeek(); refreshSchedule() }
+        weekTitle.setOnClickListener { goToToday() }
         teamSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 val newTeam = teams.getOrNull(pos) ?: return
@@ -148,7 +148,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun LinearLayout.LayoutParams.withMarginEnd(v: Int) = apply { rightMargin = v }
 
-    override fun onResume() { super.onResume(); refreshSchedule() }
+    override fun onResume() {
+        super.onResume()
+        // 每次回到前台（冷启动后、从后台切回、从子页面返回）都复位到今天与本周。
+        goToToday()
+    }
+
+    private fun goToToday() {
+        selectedDate = LocalDate.now()
+        weekOffset = 0L
+        if (::weekContainer.isInitialized) renderWeek()
+        refreshSchedule()
+    }
 
     override fun onDestroy() {
         scheduleJob?.cancel()
