@@ -92,9 +92,10 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(this@MainActivity, 4), dp(this@MainActivity, 8), dp(this@MainActivity, 4), dp(this@MainActivity, 8))
             background = rippleable(this@MainActivity, Palette.primarySoft, 12f)
         }
-        navRow.addView(prev, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        navRow.addView(weekTitle, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        navRow.addView(next, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val navGapHalf = dp(this@MainActivity, 5)
+        navRow.addView(prev, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = navGapHalf })
+        navRow.addView(weekTitle, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = navGapHalf; rightMargin = navGapHalf })
+        navRow.addView(next, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = navGapHalf })
         weekContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; weightSum = 7f; setPadding(0, dp(this@MainActivity, 8), 0, 0) }
         weekCard.addView(navRow); weekCard.addView(weekContainer)
         root.addView(weekCard)
