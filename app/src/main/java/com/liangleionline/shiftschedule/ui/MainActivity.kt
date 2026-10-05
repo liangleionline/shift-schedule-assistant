@@ -270,8 +270,8 @@ class MainActivity : AppCompatActivity() {
         val restCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         renderColumn(workCol, "上班", workColor, workSoft, date, data.groups, data.working, data.allStaff, data.working)
         renderColumn(restCol, "休息", restColor, restSoft, date, data.groups, data.resting, data.allStaff, data.working)
-        body.addView(workCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        body.addView(restCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        body.addView(workCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(this@MainActivity, 5) })
+        body.addView(restCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(this@MainActivity, 5) })
         wrap.addView(body)
         return wrap
     }
@@ -297,7 +297,7 @@ class MainActivity : AppCompatActivity() {
                     orientation = LinearLayout.VERTICAL
                     setPadding(dp(this@MainActivity, 12), dp(this@MainActivity, 10), dp(this@MainActivity, 12), dp(this@MainActivity, 10))
                     background = solid(Palette.soft, dpF(this@MainActivity, 14f))
-                    layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(this@MainActivity, 9); leftMargin = dp(this@MainActivity, 2); rightMargin = dp(this@MainActivity, 6) }
+                    layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(this@MainActivity, 9) }
                 }
                 groupCard.addView(TextView(this).apply { text = g.name; textSize = 13.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink); setPadding(0, 0, 0, dp(this@MainActivity, 4)) })
                 people.forEach { person ->
