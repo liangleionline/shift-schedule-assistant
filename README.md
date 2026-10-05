@@ -4,11 +4,15 @@
 
 ## 当前版本
 
-- v1.6.1
+- v1.6.2
 - minSdk 23（Android 6.0+）
 - targetSdk / compileSdk 36
 - Kotlin + AndroidX + Room
 - 纯 Kotlin 应用，无原生 so 库；打包按 arm64-v8a（64 位 ARM）配置，适配 64 位安卓手机。
+
+## v1.6.2 更新要点
+
+- 状态栏改为纯黑不透明、图标白色，修复 targetSdk 36 edge-to-edge 下时间/电池等系统图标与浅色配色重叠看不清的问题；全应用统一生效。
 
 ## v1.6.1 更新要点
 

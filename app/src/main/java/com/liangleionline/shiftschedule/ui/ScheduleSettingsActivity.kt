@@ -30,14 +30,13 @@ class ScheduleSettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Palette.primaryDeep
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
+        applyOpaqueStatusBar()
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Palette.bg)
-            setPadding(dp(this@ScheduleSettingsActivity, 14), statusBarInset() + dp(this@ScheduleSettingsActivity, 14), dp(this@ScheduleSettingsActivity, 14), dp(this@ScheduleSettingsActivity, 16))
+            setPadding(dp(this@ScheduleSettingsActivity, 14), dp(this@ScheduleSettingsActivity, 14), dp(this@ScheduleSettingsActivity, 14), dp(this@ScheduleSettingsActivity, 16))
         }
 
         val header = LinearLayout(this).apply {
@@ -131,11 +130,6 @@ class ScheduleSettingsActivity : AppCompatActivity() {
             }
             .setNegativeButton("取消", null)
             .show()
-    }
-
-    private fun statusBarInset(): Int {
-        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (id > 0) resources.getDimensionPixelSize(id) else 0
     }
 
     private fun loadTeams() = lifecycleScope.launch {

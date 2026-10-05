@@ -9,6 +9,9 @@ import android.graphics.drawable.RippleDrawable
 import android.view.Gravity
 import android.view.View
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 object Palette {
     val bg = Color.rgb(237, 241, 247)
@@ -68,4 +71,14 @@ fun pill(
         isClickable = true
         setOnClickListener(onClick)
     }
+}
+
+/**
+ * 纯黑不透明状态栏：退出 edge-to-edge，让系统用黑色填充状态栏区域，
+ * 图标/文字强制为浅色（白色），在任何页面配色下都清晰可读。
+ */
+fun AppCompatActivity.applyOpaqueStatusBar() {
+    WindowCompat.setDecorFitsSystemWindows(window, true)
+    window.statusBarColor = Color.BLACK
+    WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
 }

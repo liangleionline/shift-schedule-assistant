@@ -42,15 +42,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Palette.primaryDeep
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
+        applyOpaqueStatusBar()
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
 
         val scroll = ScrollView(this)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Palette.bg)
-            setPadding(dp(this@MainActivity, 14), statusBarInset() + dp(this@MainActivity, 14), dp(this@MainActivity, 14), dp(this@MainActivity, 18))
+            setPadding(dp(this@MainActivity, 14), dp(this@MainActivity, 14), dp(this@MainActivity, 14), dp(this@MainActivity, 18))
         }
 
         // 渐变头部
@@ -147,11 +146,6 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         scheduleJob?.cancel()
         super.onDestroy()
-    }
-
-    private fun statusBarInset(): Int {
-        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (id > 0) resources.getDimensionPixelSize(id) else 0
     }
 
     private fun observeData() = lifecycleScope.launch {

@@ -28,14 +28,13 @@ class StaffManageActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Palette.primaryDeep
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
+        applyOpaqueStatusBar()
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Palette.bg)
-            setPadding(dp(this@StaffManageActivity, 14), statusBarInset() + dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 16))
+            setPadding(dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 16))
         }
 
         val header = LinearLayout(this).apply {
@@ -91,11 +90,6 @@ class StaffManageActivity : AppCompatActivity() {
     override fun onResume() { super.onResume(); if (::db.isInitialized) loadTeams(keepSelection = true) }
 
     private fun spinnerAdapter(items: List<String>) = ArrayAdapter(this, R.layout.item_spinner, items).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-
-    private fun statusBarInset(): Int {
-        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (id > 0) resources.getDimensionPixelSize(id) else 0
-    }
 
     private fun loadTeams(keepSelection: Boolean) = lifecycleScope.launch {
         teams = db.dao().allTeams()
