@@ -216,3 +216,13 @@ git push -u origin main
 - Tag：`v1.0.0`
 - Title：`v1.0.0 初始版本`
 - 附件：正式签名后的 `app-release.apk`
+
+## 开源协议
+
+本项目基于 **GNU General Public License v3.0（GPL-3.0）** 开源，完整协议文本见根目录 [LICENSE](LICENSE)。
+
+- 你可以自由使用、复制、修改、再分发本软件及其源代码。
+- 任何基于本软件的修改与衍生作品再分发时，必须同样以 GPL-3.0 开源并提供完整源代码，不得转为更严格或专有许可。
+- 本软件按“现状”提供，不提供任何明示或默示担保。详见 GPL-3.0 条款：<https://www.gnu.org/licenses/gpl-3.0.html>。
+
+版权所有 © 2026 liangleionline。

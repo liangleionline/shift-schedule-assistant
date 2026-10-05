@@ -89,6 +89,13 @@ class ScheduleSettingsActivity : AppCompatActivity() {
         card.addView(clearRangeButton, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@ScheduleSettingsActivity, 12) })
         card.addView(clearAllButton, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@ScheduleSettingsActivity, 12) })
         root.addView(card)
+        root.addView(TextView(this).apply {
+            text = "本软件基于 GPL-3.0 开源，源代码与完整协议见项目仓库 LICENSE"
+            textSize = 11.5f
+            gravity = Gravity.CENTER
+            setTextColor(Palette.faint)
+            setPadding(0, dp(this@ScheduleSettingsActivity, 18), 0, 0)
+        })
         shell.addView(root, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(shell)
 
