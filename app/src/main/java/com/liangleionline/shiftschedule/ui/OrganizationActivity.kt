@@ -27,25 +27,56 @@ class OrganizationActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.rgb(15,23,42)
+        window.statusBarColor = Palette.primaryDeep
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,252)); setPadding(22,statusBarInset() + 28,22,22) }
-        root.addView(TextView(this).apply { text = "组织架构管理"; textSize = 26f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(20,34,58)) })
-        root.addView(TextView(this).apply { text = "维护班、小组；删除前会提示联动影响"; textSize = 14f; setTextColor(Color.rgb(99,115,139)); setPadding(0,8,0,18) })
-        val teamRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        teamSpinner = Spinner(this)
-        val editTeamInfo = Button(this).apply { text = "编辑班信息" }
-        teamRow.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2.2f))
-        teamRow.addView(editTeamInfo, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        val groupActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0,20,0,8) }
-        val addGroup = Button(this).apply { text = "新增小组" }
-        groupActions.addView(TextView(this).apply { text = "小组列表"; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(30,41,59)) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Palette.bg)
+            setPadding(dp(this@OrganizationActivity, 14), statusBarInset() + dp(this@OrganizationActivity, 14), dp(this@OrganizationActivity, 14), dp(this@OrganizationActivity, 16))
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@OrganizationActivity, 20), dp(this@OrganizationActivity, 18), dp(this@OrganizationActivity, 20), dp(this@OrganizationActivity, 18))
+            background = gradientBg(intArrayOf(Palette.primary, Palette.primaryDeep, Color.rgb(124, 58, 237)), dpF(this@OrganizationActivity, 26f))
+            elevation = dpF(this@OrganizationActivity, 6f)
+        }
+        header.addView(TextView(this).apply { text = "组织架构"; textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE) })
+        header.addView(TextView(this).apply { text = "维护班、小组，删除前会提示联动影响"; textSize = 12.5f; setTextColor(Color.argb(220, 255, 255, 255)); setPadding(0, dp(this@OrganizationActivity, 6), 0, 0) })
+        val teamRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(this@OrganizationActivity, 14), 0, 0) }
+        teamSpinner = Spinner(this).apply {
+            background = solid(Color.WHITE, dpF(this@OrganizationActivity, 14f))
+            setPadding(dp(this@OrganizationActivity, 14), dp(this@OrganizationActivity, 9), dp(this@OrganizationActivity, 14), dp(this@OrganizationActivity, 9))
+        }
+        val editTeamInfo = pill(this, "编辑班信息", Color.WHITE, Palette.primary)
+        teamRow.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2.2f).apply { rightMargin = dp(this@OrganizationActivity, 10) })
+        teamRow.addView(editTeamInfo, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f))
+        header.addView(teamRow)
+        root.addView(header)
+
+        val groupCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@OrganizationActivity, 14), dp(this@OrganizationActivity, 14), dp(this@OrganizationActivity, 14), dp(this@OrganizationActivity, 14))
+            background = solid(Palette.card, dpF(this@OrganizationActivity, 22f), Palette.line)
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@OrganizationActivity, 14) }
+            elevation = dpF(this@OrganizationActivity, 2f)
+        }
+        val groupActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val addGroup = pill(this, "＋ 新增小组", Palette.primary)
+        groupActions.addView(TextView(this).apply { text = "小组列表"; textSize = 18f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         groupActions.addView(addGroup)
-        val scroll = ScrollView(this)
-        groupList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        scroll.addView(groupList)
-        root.addView(teamRow); root.addView(groupActions); root.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
+        groupCard.addView(groupActions)
+        groupList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(this@OrganizationActivity, 10), 0, 0)
+        }
+        groupCard.addView(groupList)
+
+        val scroll = ScrollView(this).apply { isFillViewport = true }
+        scroll.addView(groupCard)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
 
         teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
@@ -146,7 +177,7 @@ class OrganizationActivity : AppCompatActivity() {
             // 数据库快照 + UI 前再次按 id 去重；正常情况下这里不会有重复项。
             val groupsSnapshot = db.dao().groupsOnce(team.id).distinctBy { it.id }.sortedBy { it.id }
             if (groupsSnapshot.isEmpty()) {
-                addEmptyGroupMessage("暂无小组，请点击右上角新增")
+                addEmptyGroupMessage("暂无小组，点击上方新增")
                 return@launch
             }
 
@@ -160,8 +191,10 @@ class OrganizationActivity : AppCompatActivity() {
     private fun addEmptyGroupMessage(text: String) {
         groupList.addView(TextView(this).apply {
             this.text = text
-            setPadding(12,28,12,28)
-            setTextColor(Color.GRAY)
+            gravity = Gravity.CENTER
+            setPadding(dp(this@OrganizationActivity, 12), dp(this@OrganizationActivity, 30), dp(this@OrganizationActivity, 12), dp(this@OrganizationActivity, 20))
+            setTextColor(Palette.faint)
+            textSize = 13.5f
         })
     }
 
@@ -169,18 +202,15 @@ class OrganizationActivity : AppCompatActivity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(20,16,16,16)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = 24f
-                setColor(Color.WHITE)
-                setStroke(1, Color.rgb(226,232,240))
-            }
+            setPadding(dp(this@OrganizationActivity, 16), dp(this@OrganizationActivity, 14), dp(this@OrganizationActivity, 14), dp(this@OrganizationActivity, 14))
+            background = solid(Palette.soft, dpF(this@OrganizationActivity, 16f))
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(this@OrganizationActivity, 10) }
         }
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        info.addView(TextView(this).apply { text = group.name; textSize = 18f; typeface = Typeface.DEFAULT_BOLD })
-        info.addView(TextView(this).apply { text = "$count 人"; textSize = 13f; setTextColor(Color.GRAY); setPadding(0,4,0,0) })
-        val rename = Button(this).apply { text = "改名" }
-        val delete = Button(this).apply { text = "删除" }
+        info.addView(TextView(this).apply { text = group.name; textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink) })
+        info.addView(TextView(this).apply { text = "$count 人"; textSize = 12.5f; setTextColor(Palette.sub); setPadding(0, dp(this@OrganizationActivity, 4), 0, 0) })
+        val rename = pill(this, "改名", Palette.card, Palette.ink, Palette.line, textSize = 13f)
+        val delete = pill(this, "删除", Palette.orangeSoft, Palette.orange, textSize = 13f)
         rename.setOnClickListener {
             textInputDialog("修改小组名", "请输入新的小组名称", group.name) { name ->
                 lifecycleScope.launch { db.dao().updateGroup(group.copy(name = name)); render(keepTeamId = group.teamId) }
@@ -192,9 +222,8 @@ class OrganizationActivity : AppCompatActivity() {
             }
         }
         card.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        card.addView(rename)
+        card.addView(rename, LinearLayout.LayoutParams(-2, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(this@OrganizationActivity, 8) })
         card.addView(delete)
-        card.layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 14 }
         groupList.addView(card)
     }
 

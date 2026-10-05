@@ -14,37 +14,60 @@ import androidx.room.Room
 import com.liangleionline.shiftschedule.data.*
 import kotlinx.coroutines.launch
 import org.json.JSONArray
-import org.json.JSONObject
 import java.time.LocalDate
 
 class ScheduleSettingsActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
     private lateinit var teamSpinner: Spinner
-    private lateinit var undoButton: Button
+    private lateinit var undoButton: TextView
     private var teams = listOf<Team>()
     private var currentTeamId: Long? = null
     private var suppress = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.rgb(15,23,42)
+        window.statusBarColor = Palette.primaryDeep
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
 
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,252)); setPadding(22,statusBarInset()+28,22,22) }
-        root.addView(TextView(this).apply { text = "排班设置"; textSize = 26f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(20,34,58)) })
-        root.addView(TextView(this).apply { text = "清空、按日期范围删除或撤销导入"; textSize = 14f; setTextColor(Color.rgb(99,115,139)); setPadding(0,8,0,20) })
-        teamSpinner = Spinner(this)
-        root.addView(teamSpinner)
-
-        undoButton = Button(this).apply { text = "撤销上一次导入" }
-        val clearRangeButton = Button(this).apply { text = "清空指定时间段排班" }
-        val clearAllButton = Button(this).apply { text = "清空所有排班数据" }
-        listOf(undoButton, clearRangeButton, clearAllButton).forEach { button ->
-            button.textSize = 17f
-            button.layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 22 }
-            root.addView(button)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Palette.bg)
+            setPadding(dp(this@ScheduleSettingsActivity, 14), statusBarInset() + dp(this@ScheduleSettingsActivity, 14), dp(this@ScheduleSettingsActivity, 14), dp(this@ScheduleSettingsActivity, 16))
         }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@ScheduleSettingsActivity, 20), dp(this@ScheduleSettingsActivity, 18), dp(this@ScheduleSettingsActivity, 20), dp(this@ScheduleSettingsActivity, 18))
+            background = gradientBg(intArrayOf(Palette.primary, Palette.primaryDeep, Color.rgb(124, 58, 237)), dpF(this@ScheduleSettingsActivity, 26f))
+            elevation = dpF(this@ScheduleSettingsActivity, 6f)
+        }
+        header.addView(TextView(this).apply { text = "排班设置"; textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE) })
+        header.addView(TextView(this).apply { text = "清空、按日期范围删除或撤销导入"; textSize = 12.5f; setTextColor(Color.argb(220, 255, 255, 255)); setPadding(0, dp(this@ScheduleSettingsActivity, 6), 0, 0) })
+        val spinnerRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(this@ScheduleSettingsActivity, 14), 0, 0) }
+        spinnerRow.addView(TextView(this).apply { text = "当前班"; setTextColor(Color.argb(225, 255, 255, 255)); textSize = 13f; setPadding(0, 0, dp(this@ScheduleSettingsActivity, 10), 0) })
+        teamSpinner = Spinner(this).apply {
+            background = solid(Color.WHITE, dpF(this@ScheduleSettingsActivity, 14f))
+            setPadding(dp(this@ScheduleSettingsActivity, 14), dp(this@ScheduleSettingsActivity, 9), dp(this@ScheduleSettingsActivity, 14), dp(this@ScheduleSettingsActivity, 9))
+        }
+        spinnerRow.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(spinnerRow)
+        root.addView(header)
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@ScheduleSettingsActivity, 16), dp(this@ScheduleSettingsActivity, 16), dp(this@ScheduleSettingsActivity, 16), dp(this@ScheduleSettingsActivity, 18))
+            background = solid(Palette.card, dpF(this@ScheduleSettingsActivity, 22f), Palette.line)
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@ScheduleSettingsActivity, 14) }
+            elevation = dpF(this@ScheduleSettingsActivity, 2f)
+        }
+        undoButton = pill(this, "撤销上一次导入", Palette.primary)
+        val clearRangeButton = pill(this, "清空指定时间段排班", Palette.soft, Palette.ink, Palette.line)
+        val clearAllButton = pill(this, "清空所有排班数据", Palette.orangeSoft, Palette.orange)
+        card.addView(undoButton)
+        card.addView(clearRangeButton, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@ScheduleSettingsActivity, 12) })
+        card.addView(clearAllButton, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@ScheduleSettingsActivity, 12) })
+        root.addView(card)
         setContentView(root)
 
         teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
@@ -55,7 +78,7 @@ class ScheduleSettingsActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        undoButton.setOnClickListener { confirmUndo() }
+        undoButton.setOnClickListener { if (undoButton.isEnabled) confirmUndo() }
         clearRangeButton.setOnClickListener { pickDateRange() }
         clearAllButton.setOnClickListener { confirmClearAll() }
         loadTeams()
@@ -84,6 +107,7 @@ class ScheduleSettingsActivity : AppCompatActivity() {
         val t = team()
         val count = if (t == null) 0 else db.dao().historyCount(t.id)
         undoButton.isEnabled = count > 0
+        undoButton.alpha = if (count > 0) 1f else 0.45f
         undoButton.text = if (count > 0) "撤销上一次导入（剩余 $count 次）" else "撤销上一次导入（暂无可撤销内容）"
     }
 

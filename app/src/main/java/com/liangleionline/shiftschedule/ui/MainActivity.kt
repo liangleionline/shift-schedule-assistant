@@ -1,13 +1,13 @@
 package com.liangleionline.shiftschedule.ui
 
-import android.app.DatePickerDialog
 import android.app.AlertDialog
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowInsetsControllerCompat
@@ -27,9 +27,8 @@ import kotlin.coroutines.resume
 class MainActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
     private lateinit var weekContainer: LinearLayout
-    private lateinit var leftColumn: LinearLayout
-    private lateinit var rightColumn: LinearLayout
     private lateinit var teamSpinner: Spinner
+    private lateinit var contentArea: LinearLayout
     private var teams = listOf<Team>()
     private val baseDate = LocalDate.now()
     private var selectedDate = LocalDate.now()
@@ -42,58 +41,94 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        applyDarkStatusBar()
+        window.statusBarColor = Palette.primaryDeep
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,252)); setPadding(20, statusBarInset() + 24,20,18) }
-        val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        header.addView(TextView(this).apply { text = "班组排班助手"; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(20,34,58)) })
-        header.addView(TextView(this).apply { text = "查看今日上班与休息安排"; textSize = 14f; setTextColor(Color.rgb(99,115,139)); setPadding(0,6,0,0) })
-        val weekCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(14,14,14,14) }
-        weekCard.background = rounded(Color.WHITE, 28f, Color.rgb(226,232,240))
-        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val prev = Button(this).apply { text = "‹ 上一周" }
-        val next = Button(this).apply { text = "下一周 ›" }
-        weekContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; weightSum = 7f; setPadding(0,10,0,0) }
-        val weekTitle = TextView(this).apply {
-            text = "本周"
-            gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.rgb(21,101,192))
-            setPadding(8,8,8,8)
+
+        val scroll = ScrollView(this)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Palette.bg)
+            setPadding(dp(this@MainActivity, 14), statusBarInset() + dp(this@MainActivity, 14), dp(this@MainActivity, 14), dp(this@MainActivity, 18))
         }
-        top.addView(prev, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        top.addView(weekTitle, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        top.addView(next, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        weekCard.addView(top); weekCard.addView(weekContainer)
-        teamSpinner = Spinner(this)
-        val buttons = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0,8,0,8) }
-        val importRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val manageRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0,8,0,0) }
-        val import = Button(this).apply { text = "粘贴导入" }
-        val cyclic = Button(this).apply { text = "循环排班" }
-        val settings = Button(this).apply { text = "设置" }
-        val org = Button(this).apply { text = "组织架构" }
-        val manage = Button(this).apply { text = "人员管理" }
-        importRow.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        importRow.addView(import)
-        importRow.addView(cyclic)
-        listOf(settings, org, manage).forEach { manageRow.addView(it, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)) }
-        buttons.addView(importRow); buttons.addView(manageRow)
-        val columns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        leftColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(8,8,8,8) }
-        rightColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(8,8,8,8) }
-        columns.addView(ScrollView(this).apply { addView(leftColumn) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        columns.addView(ScrollView(this).apply { addView(rightColumn) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        root.addView(header)
-        root.addView(weekCard, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).withMargins(0,18,0,12))
-        root.addView(buttons, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).withMargins(0,0,0,8))
-        root.addView(columns, LinearLayout.LayoutParams(-1,0,1f))
-        setContentView(root)
+
+        // 渐变头部
+        val headerCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@MainActivity, 20), dp(this@MainActivity, 20), dp(this@MainActivity, 20), dp(this@MainActivity, 18))
+            background = gradientBg(intArrayOf(Palette.primary, Palette.primaryDeep, Color.rgb(124, 58, 237)), dpF(this@MainActivity, 28f))
+            elevation = dpF(this@MainActivity, 6f)
+        }
+        headerCard.addView(TextView(this).apply { text = "班组排班助手"; textSize = 23f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE) })
+        headerCard.addView(TextView(this).apply { text = "${formatMd(baseDate)} ${weekCn(baseDate)} · 今日排班一目了然"; textSize = 12.5f; setTextColor(Color.argb(220, 255, 255, 255)); setPadding(0, dp(this@MainActivity, 6), 0, 0) })
+        val selectorRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(this@MainActivity, 14), 0, 0) }
+        selectorRow.addView(TextView(this).apply { text = "当前班"; setTextColor(Color.argb(225, 255, 255, 255)); textSize = 13f; setPadding(0, 0, dp(this@MainActivity, 10), 0) })
+        teamSpinner = Spinner(this).apply {
+            background = solid(Color.WHITE, dpF(this@MainActivity, 14f))
+            setPadding(dp(this@MainActivity, 14), dp(this@MainActivity, 8), dp(this@MainActivity, 14), dp(this@MainActivity, 8))
+        }
+        selectorRow.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        headerCard.addView(selectorRow)
+        root.addView(headerCard)
+
+        // 周历卡片
+        val weekCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@MainActivity, 14), dp(this@MainActivity, 12), dp(this@MainActivity, 14), dp(this@MainActivity, 12))
+            background = solid(Palette.card, dpF(this@MainActivity, 22f), Palette.line)
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@MainActivity, 14) }
+            elevation = dpF(this@MainActivity, 2f)
+        }
+        val navRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val prev = TextView(this).apply { text = "‹ 上一周"; gravity = Gravity.CENTER; textSize = 13.5f; setTextColor(Palette.ink); setPadding(dp(this@MainActivity, 6), dp(this@MainActivity, 8), dp(this@MainActivity, 6), dp(this@MainActivity, 8)); background = rippleable(this@MainActivity, Palette.soft, 12f) }
+        val next = TextView(this).apply { text = "下一周 ›"; gravity = Gravity.CENTER; textSize = 13.5f; setTextColor(Palette.ink); setPadding(dp(this@MainActivity, 6), dp(this@MainActivity, 8), dp(this@MainActivity, 6), dp(this@MainActivity, 8)); background = rippleable(this@MainActivity, Palette.soft, 12f) }
+        val weekTitle = TextView(this).apply {
+            text = "本周"; gravity = Gravity.CENTER; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.primary)
+            setPadding(dp(this@MainActivity, 4), dp(this@MainActivity, 8), dp(this@MainActivity, 4), dp(this@MainActivity, 8))
+            background = rippleable(this@MainActivity, Palette.primarySoft, 12f)
+        }
+        navRow.addView(prev, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        navRow.addView(weekTitle, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        navRow.addView(next, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        weekContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; weightSum = 7f; setPadding(0, dp(this@MainActivity, 8), 0, 0) }
+        weekCard.addView(navRow); weekCard.addView(weekContainer)
+        root.addView(weekCard)
+
+        // 操作区
+        val actionsCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@MainActivity, 12), dp(this@MainActivity, 12), dp(this@MainActivity, 12), dp(this@MainActivity, 12))
+            background = solid(Palette.card, dpF(this@MainActivity, 22f), Palette.line)
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@MainActivity, 14) }
+            elevation = dpF(this@MainActivity, 2f)
+        }
+        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@MainActivity, 10) } }
+        val importBtn = pill(this, "📋  粘贴导入", Palette.primary) { showImportDialog() }
+        val cyclicBtn = pill(this, "🔁  循环排班", Palette.primaryDeep) { showCyclicImportFlow() }
+        val orgBtn = pill(this, "组织架构", Palette.soft, Palette.ink, Palette.line) { startActivity(Intent(this, OrganizationActivity::class.java)) }
+        val manageBtn = pill(this, "人员管理", Palette.soft, Palette.ink, Palette.line) { startActivity(Intent(this, StaffManageActivity::class.java)) }
+        val settingsBtn = pill(this, "设置", Palette.soft, Palette.ink, Palette.line) { startActivity(Intent(this, ScheduleSettingsActivity::class.java)) }
+        row1.addView(importBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).withMarginEnd(dp(this@MainActivity, 10)))
+        row1.addView(cyclicBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        listOf(orgBtn, manageBtn, settingsBtn).forEachIndexed { i, b ->
+            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            if (i < 2) lp.rightMargin = dp(this@MainActivity, 10)
+            row2.addView(b, lp)
+        }
+        actionsCard.addView(row1); actionsCard.addView(row2)
+        root.addView(actionsCard)
+
+        contentArea = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(contentArea)
+        scroll.addView(root)
+        setContentView(scroll)
+
         prev.setOnClickListener { weekOffset--; renderWeek(); refreshSchedule() }
         next.setOnClickListener { weekOffset++; renderWeek(); refreshSchedule() }
         weekTitle.setOnClickListener { weekOffset = 0L; selectedDate = LocalDate.now(); renderWeek(); refreshSchedule() }
-        teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: android.view.View?, pos: Int, id: Long) {
+        teamSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 val newTeam = teams.getOrNull(pos) ?: return
                 if (suppressTeamCallback || newTeam.id == currentTeamId) return
                 currentTeamId = newTeam.id
@@ -101,32 +136,21 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
-        import.setOnClickListener { showImportDialog() }
-        cyclic.setOnClickListener { showCyclicImportFlow() }
-        settings.setOnClickListener { startActivity(Intent(this, ScheduleSettingsActivity::class.java)) }
-        org.setOnClickListener { startActivity(Intent(this, OrganizationActivity::class.java)) }
-        manage.setOnClickListener { startActivity(Intent(this, StaffManageActivity::class.java)) }
         observeData()
     }
 
-    private fun applyDarkStatusBar() {
-        window.statusBarColor = Color.rgb(15, 23, 42)
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
-    }
-
-    private fun statusBarInset(): Int {
-        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (id > 0) resources.getDimensionPixelSize(id) else 0
-    }
-
-    private fun LinearLayout.LayoutParams.withMargins(l: Int,t:Int,r:Int,b:Int) = apply { setMargins(l,t,r,b) }
-    private fun rounded(fill: Int, radius: Float, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = radius; setColor(fill); stroke?.let { setStroke(1,it) } }
+    private fun LinearLayout.LayoutParams.withMarginEnd(v: Int) = apply { rightMargin = v }
 
     override fun onResume() { super.onResume(); refreshSchedule() }
 
     override fun onDestroy() {
         scheduleJob?.cancel()
         super.onDestroy()
+    }
+
+    private fun statusBarInset(): Int {
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else 0
     }
 
     private fun observeData() = lifecycleScope.launch {
@@ -164,10 +188,25 @@ class MainActivity : AppCompatActivity() {
         for (i in 0..6) {
             val date = monday.plusDays(i.toLong())
             val selected = date == selectedDate
+            val isToday = date == baseDate
             val tv = TextView(this).apply {
-                text = date.dayOfMonth.toString(); gravity = Gravity.CENTER; setPadding(4,12,4,12); textSize = 16f
-                setTextColor(if (selected) Color.WHITE else Color.rgb(51,65,85)); typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                background = rounded(if (selected) Color.rgb(21,101,192) else Color.TRANSPARENT, 24f)
+                text = date.dayOfMonth.toString()
+                gravity = Gravity.CENTER
+                textSize = 16f
+                setPadding(dp(this@MainActivity, 4), dp(this@MainActivity, 10), dp(this@MainActivity, 4), dp(this@MainActivity, 10))
+                when {
+                    selected -> {
+                        setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
+                        background = solid(Palette.primary, dpF(this@MainActivity, 14f))
+                    }
+                    isToday -> {
+                        setTextColor(Palette.primary); typeface = Typeface.DEFAULT_BOLD
+                        background = solid(Palette.primarySoft, dpF(this@MainActivity, 14f))
+                    }
+                    else -> {
+                        setTextColor(Palette.ink); typeface = Typeface.DEFAULT
+                    }
+                }
             }
             tv.setOnClickListener { selectedDate = date; renderWeek(); refreshSchedule() }
             weekContainer.addView(tv, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -176,49 +215,110 @@ class MainActivity : AppCompatActivity() {
 
     private fun currentTeam(): Team? = teams.firstOrNull { it.id == currentTeamId } ?: teams.firstOrNull().also { currentTeamId = it?.id }
 
+    private data class DayViewData(val groups: List<Group>, val allStaff: List<Staff>, val working: List<Staff>, val resting: List<Staff>)
+
     private fun refreshSchedule() {
         val generation = ++scheduleGeneration
         scheduleJob?.cancel()
         scheduleJob = lifecycleScope.launch {
-            if (!::leftColumn.isInitialized) return@launch
-            leftColumn.removeAllViews(); rightColumn.removeAllViews()
-            val team = currentTeam() ?: return@launch
+            if (!::contentArea.isInitialized) return@launch
+            val team = currentTeam() ?: run {
+                contentArea.removeAllViews()
+                return@launch
+            }
             val staff = db.dao().staffByTeam(team.id).first().distinctBy { it.id }
             val groups = db.dao().groups(team.id).first().distinctBy { it.id }.sortedBy { it.id }
-            val record = db.dao().schedule(team.id, selectedDate.toString().substring(5))
-            val working = if (record == null) emptyList() else if (record.mode == "WORK") staff.filter { it.id in record.staffIds.distinct() } else staff.filterNot { it.id in record.staffIds.distinct() }
-            val resting = staff - working.toSet()
+            val dataToday = loadDay(team.id, selectedDate, staff, groups)
+            val dataTomorrow = loadDay(team.id, selectedDate.plusDays(1), staff, groups)
             if (generation != scheduleGeneration) return@launch
-            renderColumn(leftColumn, "当天上班", Color.rgb(220,252,231), Color.rgb(22,101,52), groups, working, staff, working)
-            renderColumn(rightColumn, "当天休息", Color.rgb(241,245,249), Color.rgb(71,85,105), groups, resting, staff, working)
+            contentArea.removeAllViews()
+            contentArea.addView(buildDaySection("今日", selectedDate, dataToday, Palette.green, Palette.greenSoft, Palette.orange, Palette.orangeSoft))
+            contentArea.addView(buildDaySection("明日", selectedDate.plusDays(1), dataTomorrow, Palette.green, Palette.greenSoft, Palette.orange, Palette.orangeSoft))
         }
     }
 
-    private fun renderColumn(container: LinearLayout, title: String, badgeBg: Int, badgeText: Int, groups: List<Group>, staff: List<Staff>, allStaff: List<Staff>, workingStaff: List<Staff>) {
-        val titleCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(18,18,18,18); background = rounded(badgeBg, 24f); isClickable = true }
-        titleCard.addView(TextView(this).apply { text = "$title  ✎"; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(badgeText) })
-        titleCard.addView(TextView(this).apply { text = "${staff.size} 人 · 点击编辑"; textSize = 13f; setTextColor(badgeText); setPadding(0,6,0,0) })
-        titleCard.setOnClickListener { showDayStaffEditor(allStaff, workingStaff) }
-        container.addView(titleCard, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 12; rightMargin = 6; leftMargin = 6 })
+    private suspend fun loadDay(teamId: Long, date: LocalDate, staff: List<Staff>, groups: List<Group>): DayViewData {
+        val record = db.dao().schedule(teamId, dateKey(date))
+        val working = if (record == null) emptyList()
+        else if (record.mode == "WORK") staff.filter { it.id in record.staffIds.distinct() }
+        else staff.filterNot { it.id in record.staffIds.distinct() }
+        return DayViewData(groups, staff, working, staff - working.toSet())
+    }
+
+    private fun buildDaySection(label: String, date: LocalDate, data: DayViewData, workColor: Int, workSoft: Int, restColor: Int, restSoft: Int): View {
+        val wrap = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@MainActivity, 16) }
+        }
+        val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        titleRow.addView(View(this).apply { background = solid(Palette.primary, dpF(this@MainActivity, 4f)) }, LinearLayout.LayoutParams(dp(this@MainActivity, 5), dp(this@MainActivity, 20)).apply { rightMargin = dp(this@MainActivity, 9) })
+        titleRow.addView(TextView(this).apply { text = label; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink) })
+        titleRow.addView(TextView(this).apply { text = "  ${formatMd(date)} ${weekCn(date)}"; textSize = 13f; setTextColor(Palette.sub) })
+        wrap.addView(titleRow)
+
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(this@MainActivity, 8), dp(this@MainActivity, 10), dp(this@MainActivity, 8), dp(this@MainActivity, 10))
+            background = solid(Palette.card, dpF(this@MainActivity, 22f), Palette.line)
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@MainActivity, 10) }
+            elevation = dpF(this@MainActivity, 2f)
+        }
+        val workCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val restCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        renderColumn(workCol, "上班", workColor, workSoft, date, data.groups, data.working, data.allStaff, data.working)
+        renderColumn(restCol, "休息", restColor, restSoft, date, data.groups, data.resting, data.allStaff, data.working)
+        body.addView(workCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        body.addView(restCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        wrap.addView(body)
+        return wrap
+    }
+
+    private fun renderColumn(container: LinearLayout, title: String, accent: Int, soft: Int, date: LocalDate, groups: List<Group>, columnStaff: List<Staff>, allStaff: List<Staff>, workingStaff: List<Staff>) {
+        val badge = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@MainActivity, 14), dp(this@MainActivity, 12), dp(this@MainActivity, 14), dp(this@MainActivity, 12))
+            background = rippleable(this@MainActivity, soft, 16f)
+            isClickable = true
+            val lp = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(this@MainActivity, 10) }
+            layoutParams = lp
+        }
+        badge.addView(TextView(this).apply { text = "当天$title ✎"; textSize = 16.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(accent) })
+        badge.addView(TextView(this).apply { text = "${columnStaff.size} 人 · 点击调整"; textSize = 11.5f; setTextColor(accent); setPadding(0, dp(this@MainActivity, 3), 0, 0) })
+        badge.setOnClickListener { showDayStaffEditor(date, allStaff, workingStaff) }
+        container.addView(badge)
         groups.forEach { g ->
-            val people = staff.filter { it.groupId == g.id }.sortedByDescending { it.role == "班长" }
+            val people = columnStaff.filter { it.groupId == g.id }.sortedByDescending { it.role == "班长" }
             if (people.isNotEmpty()) {
-                val groupCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16,14,16,14); background = rounded(Color.WHITE,22f,Color.rgb(226,232,240)) }
-                val lp = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 12; rightMargin = 6; leftMargin = 6 }
-                groupCard.addView(TextView(this).apply { text = g.name; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(30,41,59)); setPadding(0,0,0,8) })
+                val groupCard = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(this@MainActivity, 12), dp(this@MainActivity, 10), dp(this@MainActivity, 12), dp(this@MainActivity, 10))
+                    background = solid(Palette.soft, dpF(this@MainActivity, 14f))
+                    layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(this@MainActivity, 9); leftMargin = dp(this@MainActivity, 2); rightMargin = dp(this@MainActivity, 6) }
+                }
+                groupCard.addView(TextView(this).apply { text = g.name; textSize = 13.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink); setPadding(0, 0, 0, dp(this@MainActivity, 4)) })
                 people.forEach { person ->
                     groupCard.addView(TextView(this).apply {
-                        text = if (person.role == "班长") "● ${person.name}  · 班长" else "○ ${person.name}  · 组员"
-                        textSize = 15f; setPadding(2,6,2,6); setTextColor(if (person.role == "班长") Color.rgb(21,101,192) else Color.rgb(51,65,85))
+                        text = (if (person.role == "班长") "● " else "○ ") + person.name
+                        textSize = 14f
+                        setPadding(dp(this@MainActivity, 2), dp(this@MainActivity, 3), dp(this@MainActivity, 2), dp(this@MainActivity, 3))
+                        setTextColor(if (person.role == "班长") Palette.primary else Color.rgb(51, 65, 85))
                     })
                 }
-                container.addView(groupCard, lp)
+                container.addView(groupCard)
             }
         }
-        if (staff.isEmpty()) container.addView(TextView(this).apply { text = "暂无排班数据"; gravity = Gravity.CENTER; setPadding(8,32,8,8); setTextColor(Color.rgb(100,116,139)) })
+        if (columnStaff.isEmpty()) {
+            container.addView(TextView(this).apply {
+                text = "暂无人员"
+                gravity = Gravity.CENTER
+                textSize = 12.5f
+                setPadding(dp(this@MainActivity, 4), dp(this@MainActivity, 20), dp(this@MainActivity, 4), dp(this@MainActivity, 8))
+                setTextColor(Palette.faint)
+            })
+        }
     }
 
-    private fun showDayStaffEditor(allStaff: List<Staff>, workingStaff: List<Staff>) = lifecycleScope.launch {
+    private fun showDayStaffEditor(date: LocalDate, allStaff: List<Staff>, workingStaff: List<Staff>) = lifecycleScope.launch {
         val team = currentTeam() ?: return@launch
         val groups = db.dao().groupsOnce(team.id).sortedBy { it.id }
         val sortedStaff = allStaff.sortedWith(compareBy<Staff> { person -> groups.indexOfFirst { it.id == person.groupId } }.thenByDescending { it.role == "班长" }.thenBy { it.id })
@@ -230,23 +330,23 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val scroll = ScrollView(this@MainActivity)
-        val panel = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 0) }
+        val panel = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(this@MainActivity, 24), dp(this@MainActivity, 12), dp(this@MainActivity, 24), 0) }
         groups.forEach { group ->
             val people = sortedStaff.filter { it.groupId == group.id }
             if (people.isNotEmpty()) {
-                panel.addView(TextView(this@MainActivity).apply { text = group.name; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(30,41,59)); setPadding(0,12,0,4) })
+                panel.addView(TextView(this@MainActivity).apply { text = group.name; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink); setPadding(0, dp(this@MainActivity, 12), 0, dp(this@MainActivity, 4)) })
                 people.forEach { person -> panel.addView(checks[sortedStaff.indexOf(person)]) }
             }
         }
         scroll.addView(panel)
         AlertDialog.Builder(this@MainActivity)
-            .setTitle("调整 ${formatMd(selectedDate)} 上班人员")
+            .setTitle("调整 ${formatMd(date)} 上班人员")
             .setMessage("勾选为上班，取消勾选自动为休息。")
             .setView(scroll)
             .setPositiveButton("保存") { _, _ ->
                 val selectedIds = sortedStaff.mapIndexedNotNull { index, person -> if (checks[index].isChecked) person.id else null }.distinct()
                 lifecycleScope.launch {
-                    db.dao().upsertSchedule(ScheduleRecord(teamId = team.id, dateKey = dateKey(selectedDate), mode = "WORK", staffIds = selectedIds))
+                    db.dao().upsertSchedule(ScheduleRecord(teamId = team.id, dateKey = dateKey(date), mode = "WORK", staffIds = selectedIds))
                     refreshSchedule()
                     Toast.makeText(this@MainActivity, "当天排班已更新", Toast.LENGTH_SHORT).show()
                 }
@@ -278,7 +378,7 @@ class MainActivity : AppCompatActivity() {
         var start = LocalDate.now()
         var end = start.plusDays(1)
         var cycleDays = 2
-        val panel = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 0) }
+        val panel = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(this@MainActivity, 24), dp(this@MainActivity, 12), dp(this@MainActivity, 24), 0) }
         val rangeButton = Button(this@MainActivity)
         val cycleInput = EditText(this@MainActivity).apply { hint = "几天一循环，例如 2"; setText(cycleDays.toString()) }
         fun updateRangeText() { rangeButton.text = "日期区间：${formatMd(start)} 至 ${formatMd(end)}" }
@@ -293,9 +393,9 @@ class MainActivity : AppCompatActivity() {
             }, start.year, start.monthValue - 1, start.dayOfMonth).show()
         }
         updateRangeText()
-        panel.addView(TextView(this@MainActivity).apply { text = "选择日期区间"; setTextColor(Color.rgb(51,65,85)); setPadding(0,8,0,4) })
+        panel.addView(TextView(this@MainActivity).apply { text = "选择日期区间"; setTextColor(Color.rgb(51, 65, 85)); setPadding(0, dp(this@MainActivity, 8), 0, dp(this@MainActivity, 4)) })
         panel.addView(rangeButton)
-        panel.addView(TextView(this@MainActivity).apply { text = "循环天数"; setTextColor(Color.rgb(51,65,85)); setPadding(0,14,0,4) })
+        panel.addView(TextView(this@MainActivity).apply { text = "循环天数"; setTextColor(Color.rgb(51, 65, 85)); setPadding(0, dp(this@MainActivity, 14), 0, dp(this@MainActivity, 4)) })
         panel.addView(cycleInput)
         AlertDialog.Builder(this@MainActivity).setTitle("循环排班").setView(panel)
             .setPositiveButton("下一步") { _, _ ->
@@ -312,9 +412,9 @@ class MainActivity : AppCompatActivity() {
             index to checks
         }
         val scroll = ScrollView(this)
-        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 0) }
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(this@MainActivity, 24), dp(this@MainActivity, 12), dp(this@MainActivity, 24), 0) }
         selectedByCycle.forEach { (index, checks) ->
-            panel.addView(TextView(this).apply { text = "第 ${index + 1} 天上班小组"; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(30,41,59)); setPadding(0,14,0,6) })
+            panel.addView(TextView(this).apply { text = "第 ${index + 1} 天上班小组"; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink); setPadding(0, dp(this@MainActivity, 14), 0, dp(this@MainActivity, 6)) })
             checks.forEach { panel.addView(it) }
         }
         scroll.addView(panel)
@@ -339,17 +439,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun showCyclicPreview(team: Team, groups: List<Group>, allStaff: List<Staff>, daily: MutableList<Pair<LocalDate, MutableList<Staff>>>) {
         val scroll = ScrollView(this)
-        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(20, 10, 20, 0) }
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(this@MainActivity, 20), dp(this@MainActivity, 10), dp(this@MainActivity, 20), 0) }
         fun rebuild() {
             panel.removeAllViews()
             daily.forEachIndexed { dayIndex, (date, people) ->
-                val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16,14,16,14); background = rounded(Color.WHITE, 22f, Color.rgb(226,232,240)); layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 12 } }
+                val card = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(this@MainActivity, 16), dp(this@MainActivity, 14), dp(this@MainActivity, 16), dp(this@MainActivity, 14))
+                    background = solid(Color.WHITE, dpF(this@MainActivity, 18f), Palette.line)
+                    layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(this@MainActivity, 12) }
+                }
                 val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-                titleRow.addView(TextView(this).apply { text = "${formatMd(date)}  上班 ${people.size} 人"; typeface = Typeface.DEFAULT_BOLD; textSize = 17f; setTextColor(Color.rgb(30,41,59)) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                titleRow.addView(TextView(this).apply { text = "${formatMd(date)}  上班 ${people.size} 人"; typeface = Typeface.DEFAULT_BOLD; textSize = 16f; setTextColor(Palette.ink) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 val edit = Button(this).apply { text = "调整" }
                 titleRow.addView(edit)
                 card.addView(titleRow)
-                card.addView(TextView(this).apply { text = people.joinToString("、") { it.name }.ifBlank { "无人上班" }; setTextColor(Color.rgb(71,85,105)); setPadding(0,8,0,0) })
+                card.addView(TextView(this).apply { text = people.joinToString("、") { it.name }.ifBlank { "无人上班" }; setTextColor(Palette.sub); setPadding(0, dp(this@MainActivity, 8), 0, 0) })
                 edit.setOnClickListener { editCyclicDay(team, groups, allStaff, daily, dayIndex) { rebuild() } }
                 panel.addView(card)
             }
@@ -364,7 +469,7 @@ class MainActivity : AppCompatActivity() {
         val current = daily[dayIndex].second
         val checks = allStaff.sortedBy { it.groupId }.map { person -> android.widget.CheckBox(this).apply { text = "${groups.firstOrNull { it.id == person.groupId }?.name.orEmpty()} · ${person.name}${if (person.role == "班长") "（班长）" else ""}"; isChecked = current.any { it.id == person.id } } }
         val scroll = ScrollView(this)
-        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 0) }
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(this@MainActivity, 24), dp(this@MainActivity, 12), dp(this@MainActivity, 24), 0) }
         checks.forEach { panel.addView(it) }; scroll.addView(panel)
         AlertDialog.Builder(this).setTitle("调整 ${formatMd(daily[dayIndex].first)} 上班人员").setView(scroll)
             .setPositiveButton("确定") { _, _ ->
@@ -388,6 +493,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun formatMd(date: LocalDate) = "%d月%d日".format(date.monthValue, date.dayOfMonth)
     private fun dateKey(date: LocalDate) = "%02d-%02d".format(date.monthValue, date.dayOfMonth)
+    private fun weekCn(date: LocalDate) = when (date.dayOfWeek.value) { 1 -> "周一"; 2 -> "周二"; 3 -> "周三"; 4 -> "周四"; 5 -> "周五"; 6 -> "周六"; else -> "周日" }
 
     private fun showImportDialog() {
         val input = android.widget.EditText(this).apply { hint = "在此粘贴排班文本"; minLines = 8 }
@@ -490,7 +596,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAddUnknownStaffDialog(raw: String, team: Team, continuation: kotlinx.coroutines.CancellableContinuation<Staff?>) {
-        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(28, 12, 28, 0) }
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(this@MainActivity, 28), dp(this@MainActivity, 12), dp(this@MainActivity, 28), 0) }
         val nameInput = android.widget.EditText(this).apply { setText(raw) }
         val groupSpinner = Spinner(this)
         var groups = emptyList<Group>()
@@ -500,7 +606,7 @@ class MainActivity : AppCompatActivity() {
         }
         panel.addView(android.widget.TextView(this).apply { text = "姓名" })
         panel.addView(nameInput)
-        panel.addView(android.widget.TextView(this).apply { text = "添加到小组"; setPadding(0, 14, 0, 0) })
+        panel.addView(android.widget.TextView(this).apply { text = "添加到小组"; setPadding(0, dp(this@MainActivity, 14), 0, 0) })
         panel.addView(groupSpinner)
         AlertDialog.Builder(this).setTitle("新增人员：$raw").setView(panel).setPositiveButton("保存") { _, _ ->
             val name = nameInput.text.toString().trim()

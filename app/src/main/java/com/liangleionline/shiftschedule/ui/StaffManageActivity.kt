@@ -3,7 +3,6 @@ package com.liangleionline.shiftschedule.ui
 import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -29,21 +28,49 @@ class StaffManageActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.rgb(15,23,42)
+        window.statusBarColor = Palette.primaryDeep
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,252)); setPadding(22,statusBarInset() + 28,22,22) }
-        root.addView(TextView(this).apply { text = "人员管理"; textSize = 26f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(20,34,58)) })
-        root.addView(TextView(this).apply { text = "选择班和小组后维护人员"; textSize = 14f; setTextColor(Color.rgb(99,115,139)); setPadding(0,8,0,18) })
-        teamSpinner = Spinner(this); groupSpinner = Spinner(this)
-        val addButton = Button(this).apply { text = "新增人员" }
-        val filters = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0,8,0,8) }
-        filters.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)); filters.addView(groupSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)); filters.addView(addButton)
-        val scroll = ScrollView(this)
-        container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0,12,0,0) }
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Palette.bg)
+            setPadding(dp(this@StaffManageActivity, 14), statusBarInset() + dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 16))
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@StaffManageActivity, 20), dp(this@StaffManageActivity, 18), dp(this@StaffManageActivity, 20), dp(this@StaffManageActivity, 18))
+            background = gradientBg(intArrayOf(Palette.primary, Palette.primaryDeep, Color.rgb(124, 58, 237)), dpF(this@StaffManageActivity, 26f))
+            elevation = dpF(this@StaffManageActivity, 6f)
+        }
+        header.addView(TextView(this).apply { text = "人员管理"; textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE) })
+        header.addView(TextView(this).apply { text = "选择班和小组后维护人员"; textSize = 12.5f; setTextColor(Color.argb(220, 255, 255, 255)); setPadding(0, dp(this@StaffManageActivity, 6), 0, 0) })
+        root.addView(header)
+
+        val filterCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 14))
+            background = solid(Palette.card, dpF(this@StaffManageActivity, 22f), Palette.line)
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@StaffManageActivity, 14) }
+            elevation = dpF(this@StaffManageActivity, 2f)
+        }
+        teamSpinner = styledSpinner()
+        groupSpinner = styledSpinner()
+        val addButton = pill(this, "＋ 新增人员", Palette.primary)
+        val filters = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        filters.addView(teamSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(this@StaffManageActivity, 8) })
+        filters.addView(groupSpinner, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(this@StaffManageActivity, 8) })
+        filters.addView(addButton, LinearLayout.LayoutParams(-2, LinearLayout.LayoutParams.WRAP_CONTENT))
+        filterCard.addView(filters)
+        root.addView(filterCard)
+
+        val scroll = ScrollView(this).apply { isFillViewport = true }
+        container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(this@StaffManageActivity, 2), dp(this@StaffManageActivity, 12), dp(this@StaffManageActivity, 2), 0) }
         scroll.addView(container)
-        root.addView(filters); root.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
+
         addButton.setOnClickListener { showEditDialog(null) }
         teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { if (!suppress) { selectedTeam = teams.getOrNull(position); selectedGroup = null; loadGroups() } }
@@ -54,6 +81,11 @@ class StaffManageActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         loadTeams(keepSelection = true)
+    }
+
+    private fun styledSpinner() = Spinner(this).apply {
+        background = solid(Palette.soft, dpF(this@StaffManageActivity, 13f), Palette.line)
+        setPadding(dp(this@StaffManageActivity, 10), dp(this@StaffManageActivity, 8), dp(this@StaffManageActivity, 10), dp(this@StaffManageActivity, 8))
     }
 
     override fun onResume() { super.onResume(); if (::db.isInitialized) loadTeams(keepSelection = true) }
@@ -91,18 +123,38 @@ class StaffManageActivity : AppCompatActivity() {
         val group = selectedGroup
         if (group == null) { container.addView(message("请先在组织架构中创建班和小组")); return@launch }
         val people = db.dao().staffByGroup(group.id)
-        if (people.isEmpty()) container.addView(message("当前小组还没有人员，点击右上角新增"))
+        if (people.isEmpty()) container.addView(message("当前小组还没有人员，点击上方新增"))
         people.forEach { staff -> container.addView(staffCard(staff)) }
     }
-    private fun message(text: String) = TextView(this).apply { this.text = text; gravity = Gravity.CENTER; setPadding(16,44,16,44); setTextColor(Color.rgb(100,116,139)) }
+
+    private fun message(text: String) = TextView(this).apply {
+        this.text = text; gravity = Gravity.CENTER
+        setPadding(dp(this@StaffManageActivity, 16), dp(this@StaffManageActivity, 44), dp(this@StaffManageActivity, 16), dp(this@StaffManageActivity, 30))
+        setTextColor(Palette.faint); textSize = 13.5f
+    }
+
     private fun staffCard(staff: Staff): View {
-        val card = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(22,18,18,18); background = GradientDrawable().apply { cornerRadius = 28f; setColor(Color.WHITE); setStroke(1, Color.rgb(226,232,240)) }; layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 16 } }
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(this@StaffManageActivity, 16), dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 14), dp(this@StaffManageActivity, 14))
+            background = solid(Palette.card, dpF(this@StaffManageActivity, 16f), Palette.line)
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(this@StaffManageActivity, 10) }
+            elevation = dpF(this@StaffManageActivity, 1.5f)
+        }
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        info.addView(TextView(this).apply { text = staff.name; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(24,35,55)) })
-        info.addView(TextView(this).apply { text = if (staff.role == "班长") "职位：班长" else "职位：组员"; textSize = 14f; setTextColor(if (staff.role == "班长") Color.rgb(21,101,192) else Color.rgb(100,116,139)); setPadding(0,6,0,0) })
-        val edit = Button(this).apply { text = "编辑" }; val delete = Button(this).apply { text = "删除" }
+        info.addView(TextView(this).apply { text = staff.name; textSize = 17.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink) })
+        info.addView(TextView(this).apply {
+            text = if (staff.role == "班长") "班长" else "组员"
+            textSize = 12f
+            setTextColor(if (staff.role == "班长") Palette.primary else Palette.sub)
+            setPadding(0, dp(this@StaffManageActivity, 4), 0, 0)
+        })
+        val edit = pill(this, "编辑", Palette.primarySoft, Palette.primary, textSize = 13f)
+        val delete = pill(this, "删除", Palette.orangeSoft, Palette.orange, textSize = 13f)
         edit.setOnClickListener { showEditDialog(staff) }; delete.setOnClickListener { confirmDelete(staff) }
-        card.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)); card.addView(edit); card.addView(delete)
+        card.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        card.addView(edit, LinearLayout.LayoutParams(-2, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(this@StaffManageActivity, 8) })
+        card.addView(delete)
         return card
     }
 
@@ -111,11 +163,11 @@ class StaffManageActivity : AppCompatActivity() {
         var chosenTeam = if (staff != null) allTeams.firstOrNull { team -> db.dao().groupsOnce(team.id).any { it.id == staff.groupId } } else selectedTeam
         var dialogGroups = chosenTeam?.let { db.dao().groupsOnce(it.id) } ?: emptyList()
         var chosenGroup = if (staff != null) dialogGroups.firstOrNull { it.id == staff.groupId } else selectedGroup ?: dialogGroups.firstOrNull()
-        val panel = LinearLayout(this@StaffManageActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(28,12,28,0) }
+        val panel = LinearLayout(this@StaffManageActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(this@StaffManageActivity, 28), dp(this@StaffManageActivity, 12), dp(this@StaffManageActivity, 28), 0) }
         val nameInput = EditText(this@StaffManageActivity).apply { setText(staff?.name ?: ""); hint = "请输入姓名" }
-        val teamSelect = Spinner(this@StaffManageActivity); val groupSelect = Spinner(this@StaffManageActivity)
+        val teamSelect = styledSpinner(); val groupSelect = styledSpinner()
         var suppressDialogCallbacks = true
-        val radioGroup = RadioGroup(this@StaffManageActivity).apply { orientation = RadioGroup.HORIZONTAL; setPadding(0,16,0,0) }
+        val radioGroup = RadioGroup(this@StaffManageActivity).apply { orientation = RadioGroup.HORIZONTAL; setPadding(0, dp(this@StaffManageActivity, 14), 0, 0) }
         val leader = RadioButton(this@StaffManageActivity).apply { text = "班长"; id = View.generateViewId() }; val member = RadioButton(this@StaffManageActivity).apply { text = "组员"; id = View.generateViewId() }
         if (staff?.role == "班长") leader.isChecked = true else member.isChecked = true
         radioGroup.addView(leader); radioGroup.addView(member)
@@ -140,7 +192,13 @@ class StaffManageActivity : AppCompatActivity() {
         panel.addView(label("姓名")); panel.addView(nameInput); panel.addView(label("所属班", 14)); panel.addView(teamSelect); panel.addView(label("所属小组", 14)); panel.addView(groupSelect); panel.addView(label("职位", 14)); panel.addView(radioGroup)
         AlertDialog.Builder(this@StaffManageActivity).setTitle(if (staff == null) "新增人员" else "编辑人员").setView(panel).setPositiveButton("保存") { _, _ -> saveStaff(staff, chosenGroup, nameInput.text.toString().trim(), if (leader.isChecked) "班长" else "组员") }.setNegativeButton("取消", null).show()
     }
-    private fun label(text: String, top: Int = 0) = TextView(this).apply { this.text = text; setTextColor(Color.rgb(71,85,105)); setPadding(0,top,0,0) }
+
+    private fun label(text: String, top: Int = 0) = TextView(this).apply {
+        this.text = text; setTextColor(Palette.sub)
+        setPadding(0, if (top == 0) 0 else dp(this@StaffManageActivity, top), 0, 0)
+        textSize = 13f
+    }
+
     private fun saveStaff(old: Staff?, group: Group?, name: String, role: String) = lifecycleScope.launch {
         if (name.isBlank()) { Toast.makeText(this@StaffManageActivity, "姓名不能为空", Toast.LENGTH_SHORT).show(); return@launch }
         if (group == null) { Toast.makeText(this@StaffManageActivity, "请先选择小组", Toast.LENGTH_SHORT).show(); return@launch }
@@ -157,6 +215,7 @@ class StaffManageActivity : AppCompatActivity() {
         suppress = false
         loadStaff()
     }
+
     private fun confirmDelete(staff: Staff) = AlertDialog.Builder(this).setTitle("删除人员").setMessage("确定删除「${staff.name}」吗？").setPositiveButton("删除") { _, _ -> lifecycleScope.launch {
         if (staff.role == "班长" && db.dao().leaderCount(staff.groupId) <= 1) Toast.makeText(this@StaffManageActivity, "每个小组至少保留一个班长", Toast.LENGTH_SHORT).show() else { db.dao().deleteStaff(staff); loadStaff() }
     }}.setNegativeButton("取消", null).show()
