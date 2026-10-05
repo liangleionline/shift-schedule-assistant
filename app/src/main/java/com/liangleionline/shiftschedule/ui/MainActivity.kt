@@ -2,6 +2,7 @@ package com.liangleionline.shiftschedule.ui
 
 import android.app.AlertDialog
 import android.app.DatePickerDialog
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -215,6 +216,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun currentTeam(): Team? = teams.firstOrNull { it.id == currentTeamId } ?: teams.firstOrNull().also { currentTeamId = it?.id }
 
+    private fun userName(): String = getSharedPreferences("app_prefs", Context.MODE_PRIVATE).getString("user_name", "").orEmpty().trim()
+
     private data class DayViewData(val groups: List<Group>, val allStaff: List<Staff>, val working: List<Staff>, val resting: List<Staff>)
 
     private fun refreshSchedule() {
@@ -289,6 +292,7 @@ class MainActivity : AppCompatActivity() {
         groups.forEach { g ->
             val people = columnStaff.filter { it.groupId == g.id }.sortedByDescending { it.role == "班长" }
             if (people.isNotEmpty()) {
+                val me = userName()
                 val groupCard = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(dp(this@MainActivity, 12), dp(this@MainActivity, 10), dp(this@MainActivity, 12), dp(this@MainActivity, 10))
@@ -297,11 +301,17 @@ class MainActivity : AppCompatActivity() {
                 }
                 groupCard.addView(TextView(this).apply { text = g.name; textSize = 13.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink); setPadding(0, 0, 0, dp(this@MainActivity, 4)) })
                 people.forEach { person ->
+                    val isMe = me.isNotEmpty() && person.name == me
                     groupCard.addView(TextView(this).apply {
                         text = (if (person.role == "班长") "● " else "○ ") + person.name
                         textSize = 14f
                         setPadding(dp(this@MainActivity, 2), dp(this@MainActivity, 3), dp(this@MainActivity, 2), dp(this@MainActivity, 3))
-                        setTextColor(if (person.role == "班长") Palette.primary else Color.rgb(51, 65, 85))
+                        setTextColor(when {
+                            isMe -> Palette.primary
+                            person.role == "班长" -> Palette.primary
+                            else -> Color.rgb(51, 65, 85)
+                        })
+                        if (isMe) typeface = Typeface.DEFAULT_BOLD
                     })
                 }
                 container.addView(groupCard)

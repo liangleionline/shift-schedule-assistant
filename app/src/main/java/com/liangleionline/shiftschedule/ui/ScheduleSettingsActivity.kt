@@ -2,6 +2,7 @@ package com.liangleionline.shiftschedule.ui
 
 import android.app.AlertDialog
 import android.app.DatePickerDialog
+import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -20,9 +21,12 @@ class ScheduleSettingsActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
     private lateinit var teamSpinner: Spinner
     private lateinit var undoButton: TextView
+    private lateinit var nameButton: TextView
     private var teams = listOf<Team>()
     private var currentTeamId: Long? = null
     private var suppress = true
+
+    private fun prefs() = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +58,18 @@ class ScheduleSettingsActivity : AppCompatActivity() {
         header.addView(spinnerRow)
         root.addView(header)
 
+        val nameCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@ScheduleSettingsActivity, 16), dp(this@ScheduleSettingsActivity, 16), dp(this@ScheduleSettingsActivity, 16), dp(this@ScheduleSettingsActivity, 16))
+            background = solid(Palette.card, dpF(this@ScheduleSettingsActivity, 22f), Palette.line)
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@ScheduleSettingsActivity, 14) }
+            elevation = dpF(this@ScheduleSettingsActivity, 2f)
+        }
+        nameCard.addView(TextView(this).apply { text = "我的姓名"; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Palette.ink) })
+        nameButton = pill(this, "点击设置", Palette.primarySoft, Palette.primary)
+        nameCard.addView(nameButton, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@ScheduleSettingsActivity, 12) })
+        root.addView(nameCard)
+
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(this@ScheduleSettingsActivity, 16), dp(this@ScheduleSettingsActivity, 16), dp(this@ScheduleSettingsActivity, 16), dp(this@ScheduleSettingsActivity, 18))
@@ -79,9 +95,42 @@ class ScheduleSettingsActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         undoButton.setOnClickListener { if (undoButton.isEnabled) confirmUndo() }
+        nameButton.setOnClickListener { showUserNameDialog() }
         clearRangeButton.setOnClickListener { pickDateRange() }
         clearAllButton.setOnClickListener { confirmClearAll() }
+        refreshUserNameLabel()
         loadTeams()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::nameButton.isInitialized) refreshUserNameLabel()
+    }
+
+    private fun refreshUserNameLabel() {
+        val name = prefs().getString("user_name", "").orEmpty().trim()
+        nameButton.text = if (name.isEmpty()) "点击设置" else "已设置：$name（点击修改）"
+    }
+
+    private fun showUserNameDialog() {
+        val current = prefs().getString("user_name", "").orEmpty()
+        val input = android.widget.EditText(this).apply {
+            setText(current)
+            hint = "请输入你在排班表中的姓名"
+            setSelection(current.length)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("我的姓名")
+            .setMessage("设置后，首页今日/明日排班名单中与该姓名一致的人员会加粗显示。留空保存即取消。")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val value = input.text.toString().trim()
+                prefs().edit().putString("user_name", value).apply()
+                refreshUserNameLabel()
+                Toast.makeText(this, if (value.isEmpty()) "已取消姓名标记" else "已保存", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun statusBarInset(): Int {
