@@ -28,9 +28,14 @@ class StaffManageActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        applyOpaqueStatusBar()
+        configureDarkStatusBar()
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
 
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+            setPadding(0, statusBarHeightPx(), 0, 0)
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Palette.bg)
@@ -64,11 +69,12 @@ class StaffManageActivity : AppCompatActivity() {
         filterCard.addView(filters)
         root.addView(filterCard)
 
-        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val scroll = ScrollView(this).apply { isFillViewport = true; setBackgroundColor(Palette.bg) }
         container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(this@StaffManageActivity, 2), dp(this@StaffManageActivity, 12), dp(this@StaffManageActivity, 2), 0) }
         scroll.addView(container)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
+        shell.addView(root, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(shell)
 
         addButton.setOnClickListener { showEditDialog(null) }
         teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {

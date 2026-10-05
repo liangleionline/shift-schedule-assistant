@@ -42,10 +42,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        applyOpaqueStatusBar()
+        configureDarkStatusBar()
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
 
-        val scroll = ScrollView(this)
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+            setPadding(0, statusBarHeightPx(), 0, 0)
+        }
+        val scroll = ScrollView(this).apply { setBackgroundColor(Palette.bg); isFillViewport = true }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Palette.bg)
@@ -122,7 +127,8 @@ class MainActivity : AppCompatActivity() {
         contentArea = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(contentArea)
         scroll.addView(root)
-        setContentView(scroll)
+        shell.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(shell)
 
         prev.setOnClickListener { weekOffset--; renderWeek(); refreshSchedule() }
         next.setOnClickListener { weekOffset++; renderWeek(); refreshSchedule() }

@@ -4,11 +4,15 @@
 
 ## 当前版本
 
-- v1.6.2
+- v1.6.3
 - minSdk 23（Android 6.0+）
 - targetSdk / compileSdk 36
 - Kotlin + AndroidX + Room
 - 纯 Kotlin 应用，无原生 so 库；打包按 arm64-v8a（64 位 ARM）配置，适配 64 位安卓手机。
+
+## v1.6.3 更新要点
+
+- 状态栏黑条改为应用自绘：最外层容器纯黑、顶部预留状态栏高度，系统图标强制白色；不再依赖系统是否退出 edge-to-edge，修复三星 One UI / Android 15+ 上状态栏透明、图标看不清的问题。
 
 ## v1.6.2 更新要点
 

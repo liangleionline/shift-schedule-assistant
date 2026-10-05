@@ -30,8 +30,14 @@ class ScheduleSettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        applyOpaqueStatusBar()
+        configureDarkStatusBar()
         db = Room.databaseBuilder(this, AppDatabase::class.java, "shift-schedule.db").fallbackToDestructiveMigration().build()
+
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+            setPadding(0, statusBarHeightPx(), 0, 0)
+        }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -83,7 +89,8 @@ class ScheduleSettingsActivity : AppCompatActivity() {
         card.addView(clearRangeButton, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@ScheduleSettingsActivity, 12) })
         card.addView(clearAllButton, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(this@ScheduleSettingsActivity, 12) })
         root.addView(card)
-        setContentView(root)
+        shell.addView(root, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(shell)
 
         teamSpinner.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {

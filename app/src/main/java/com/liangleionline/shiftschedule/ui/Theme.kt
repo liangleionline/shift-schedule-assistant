@@ -74,11 +74,24 @@ fun pill(
 }
 
 /**
- * 纯黑不透明状态栏：退出 edge-to-edge，让系统用黑色填充状态栏区域，
- * 图标/文字强制为浅色（白色），在任何页面配色下都清晰可读。
+ * 状态栏高度（px）。edge-to-edge 下用于自己留出顶部黑条。
  */
-fun AppCompatActivity.applyOpaqueStatusBar() {
-    WindowCompat.setDecorFitsSystemWindows(window, true)
+fun AppCompatActivity.statusBarHeightPx(): Int {
+    val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+    return if (id > 0) resources.getDimensionPixelSize(id) else 0
+}
+
+/**
+ * 纯黑不透明状态栏（兼容 Android 15/16 强制 edge-to-edge 与三星 One UI）。
+ * 系统在 targetSdk 35+ 会忽略 statusBarColor / setDecorFitsSystemWindows，
+ * 因此除了设置颜色与浅色图标外，真正的黑底由布局外层容器自行绘制。
+ */
+fun AppCompatActivity.configureDarkStatusBar() {
     window.statusBarColor = Color.BLACK
-    WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
+    val controller = WindowInsetsControllerCompat(window, window.decorView)
+    controller.isAppearanceLightStatusBars = false
+    // 兼容部分厂商 ROM：同时清掉旧 API 的“深色图标”标志，强制时间/电池为白色。
+    @Suppress("DEPRECATION")
+    window.decorView.systemUiVisibility =
+        window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
 }
