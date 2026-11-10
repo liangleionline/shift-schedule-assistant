@@ -1,14 +1,52 @@
 # 班组排班助手（Android）
 
+<p align="center">
+  <a href="https://github.com/liangleionline/shift-schedule-assistant/releases/latest"><img src="https://img.shields.io/github/v/release/liangleionline/shift-schedule-assistant?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&color=4F7DF3&logo=github" alt="最新版本"></a>
+  <a href="https://github.com/liangleionline/shift-schedule-assistant/releases"><img src="https://img.shields.io/github/downloads/liangleionline/shift-schedule-assistant/total?label=%E4%B8%8B%E8%BD%BD%E6%80%BB%E6%95%B0&color=2EA043&logo=github" alt="下载总数"></a>
+  <a href="https://github.com/liangleionline/shift-schedule-assistant"><img src="https://img.shields.io/github/stars/liangleionline/shift-schedule-assistant?label=Stars&color=DB61A2&logo=github" alt="Stars"></a>
+  <a href="https://github.com/liangleionline/shift-schedule-assistant/blob/main/LICENSE"><img src="https://img.shields.io/github/license/liangleionline/shift-schedule-assistant?label=%E8%AE%B8%E5%8F%AF%E8%AF%81&color=blue" alt="License"></a>
+  <a href="https://github.com/liangleionline/shift-schedule-assistant"><img src="https://img.shields.io/github/last-commit/liangleionline/shift-schedule-assistant?label=%E6%9C%80%E8%BF%91%E6%8F%90%E4%BA%A4&color=orange" alt="Last commit"></a>
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/Android-6.0%2B-3DDC84?logo=android&logoColor=white" alt="Android 6.0+">
+  <img src="https://img.shields.io/badge/ABI-arm64--v8a-blueviolet" alt="arm64-v8a">
+  <img src="https://img.shields.io/badge/Kotlin-1.9.24-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
+  <img src="https://img.shields.io/badge/Room-2.6.1-6DB33F" alt="Room">
+  <img src="https://img.shields.io/badge/SDK-36-informational" alt="SDK 36">
+</p>
+<p align="center">
+  <img src="https://komarev.com/ghpvc/?username=liangleionline&repo=shift-schedule-assistant&label=%E8%AE%BF%E9%97%AE%E9%87%8F&color=0e75b6&style=flat" alt="访问量">
+  <a href="https://github.com/liangleionline/shift-schedule-assistant/graphs/traffic"><img src="https://img.shields.io/badge/%E8%AE%BF%E9%97%AE%E4%B8%8E%E4%B8%8B%E8%BD%BD%E8%AF%A6%E6%83%85-Insights%20Traffic-8250df" alt="访问与下载详情"></a>
+</p>
+
 面向作息不规律班组的本地排班查看与文本导入工具。应用以「班 → 小组」为组织层级，支持人员管理、批量粘贴排班文本、姓名模糊匹配、本周日历切换，以及上班/休息双栏查看。
+
+> 「访问量」徽章按 README 被浏览的次数累加；「下载总数」统计所有 Release 附件的累计下载次数，均由对应服务实时生成。精确的 14 天访问/克隆曲线与来源分布见 [Insights → Traffic](https://github.com/liangleionline/shift-schedule-assistant/graphs/traffic)。
 
 ## 当前版本
 
-- v1.6.3
+- v1.6.7
 - minSdk 23（Android 6.0+）
 - targetSdk / compileSdk 36
 - Kotlin + AndroidX + Room
 - 纯 Kotlin 应用，无原生 so 库；打包按 arm64-v8a（64 位 ARM）配置，适配 64 位安卓手机。
+
+## v1.6.7 更新要点
+
+- 开源协议切换为 **GPL-3.0**：仓库新增完整 `LICENSE`，README 增加协议章节，设置页底部显示开源声明。
+
+## v1.6.6 更新要点
+
+- 在首页选了其他日期后切到后台再回到前台，自动复位到**今天**并回到本周；从子页面返回首页同样回到今天。
+- 冷启动始终选中当天（选中日期与周偏移不做持久化）。
+
+## v1.6.5 更新要点
+
+- 周历「上一周 / 本周 / 下一周」三个按钮之间增加统一间距，不再连成一片。
+
+## v1.6.4 更新要点
+
+- 首页上班（绿）/休息（橙）两个色块之间加间隙，并与下方姓名卡片左右边缘对齐、宽度一致。
 
 ## v1.6.3 更新要点
 
